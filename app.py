@@ -2,7 +2,14 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
-from fyers_api import fyersModel
+import os
+
+# Ensure fyers-api-v2 is installed
+try:
+    from fyers_api import fyersModel
+except ModuleNotFoundError:
+    os.system("pip install fyers-apiv2")
+    from fyers_api import fyersModel
 
 # Streamlit UI - Must be first command
 st.set_page_config(layout="wide", page_title="Options & Futures Dashboard")
