@@ -29,29 +29,34 @@ cm_bhavcopy_df = load_data(cm_bhavcopy_file)
 st.title("📊 Options & Futures Market Dashboard")
 
 if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
-    # Ensure required columns exist
+    # Ensure required columns exist dynamically
     required_columns_fo = {"XpryDt", "TckrSymb", "ClsPric", "OpnIntrst", "ChngInOpnIntrst", "OptnTp"}
     required_columns_cm = {"SYMBOL", "DELIV_PER", "LAST_PRICE", "VWAP"}
     
-    if not required_columns_fo.issubset(set(fo_bhavcopy_df.columns)):
-        st.error("FO Bhavcopy file is missing required columns.")
+    missing_columns_fo = required_columns_fo - set(fo_bhavcopy_df.columns)
+    missing_columns_cm = required_columns_cm - set(cm_bhavcopy_df.columns)
+    
+    if missing_columns_fo:
+        st.error(f"FO Bhavcopy file is missing required columns: {', '.join(missing_columns_fo)}")
         st.stop()
     
-    if not required_columns_cm.issubset(set(cm_bhavcopy_df.columns)):
-        st.error("CM Bhavcopy file is missing required columns.")
+    if missing_columns_cm:
+        st.error(f"CM Bhavcopy file is missing required columns: {', '.join(missing_columns_cm)}")
         st.stop()
     
     # Convert necessary columns to correct data types
-    fo_bhavcopy_df["ClsPric"] = pd.to_numeric(fo_bhavcopy_df["ClsPric"], errors='coerce')
-    fo_bhavcopy_df["OpnIntrst"] = pd.to_numeric(fo_bhavcopy_df["OpnIntrst"], errors='coerce')
-    fo_bhavcopy_df["ChngInOpnIntrst"] = pd.to_numeric(fo_bhavcopy_df["ChngInOpnIntrst"], errors='coerce')
-    cm_bhavcopy_df["DELIV_PER"] = pd.to_numeric(cm_bhavcopy_df["DELIV_PER"], errors='coerce')
-    cm_bhavcopy_df["LAST_PRICE"] = pd.to_numeric(cm_bhavcopy_df["LAST_PRICE"], errors='coerce')
-    cm_bhavcopy_df["VWAP"] = pd.to_numeric(cm_bhavcopy_df["VWAP"], errors='coerce')
+    numeric_columns = ["ClsPric", "OpnIntrst", "ChngInOpnIntrst", "DELIV_PER", "LAST_PRICE", "VWAP"]
+    for col in numeric_columns:
+        if col in fo_bhavcopy_df.columns:
+            fo_bhavcopy_df[col] = pd.to_numeric(fo_bhavcopy_df[col], errors='coerce')
+        if col in cm_bhavcopy_df.columns:
+            cm_bhavcopy_df[col] = pd.to_numeric(cm_bhavcopy_df[col], errors='coerce')
     
-    # Calculate 20 SMA for Price and Volume
-    cm_bhavcopy_df["20_SMA"] = cm_bhavcopy_df["LAST_PRICE"].rolling(window=20).mean()
-    cm_bhavcopy_df["20_SMA_Volume"] = cm_bhavcopy_df["VWAP"].rolling(window=20).mean()
+    # Calculate 20 SMA for Price and Volume if VWAP and LAST_PRICE exist
+    if "LAST_PRICE" in cm_bhavcopy_df.columns:
+        cm_bhavcopy_df["20_SMA"] = cm_bhavcopy_df["LAST_PRICE"].rolling(window=20).mean()
+    if "VWAP" in cm_bhavcopy_df.columns:
+        cm_bhavcopy_df["20_SMA_Volume"] = cm_bhavcopy_df["VWAP"].rolling(window=20).mean()
     
     # Expiry Filter
     fo_bhavcopy_df["XpryDt"] = pd.to_datetime(fo_bhavcopy_df["XpryDt"], errors='coerce')
@@ -79,30 +84,21 @@ if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
     ).reset_index()
     
     # Merge with Delivery, LTP, SMA & VWAP Data
-    summary_table = summary_table.merge(cm_bhavcopy_df[["Stock", "Delivery_Percentage", "LTP", "20_SMA", "VWAP", "20_SMA_Volume"]], left_on="TckrSymb", right_on="Stock", how="left").drop(columns=["Stock"])
+    merge_columns = ["Stock", "Delivery_Percentage", "LTP"]
+    if "20_SMA" in cm_bhavcopy_df.columns:
+        merge_columns.append("20_SMA")
+    if "VWAP" in cm_bhavcopy_df.columns:
+        merge_columns.append("VWAP")
+    if "20_SMA_Volume" in cm_bhavcopy_df.columns:
+        merge_columns.append("20_SMA_Volume")
+    
+    summary_table = summary_table.merge(cm_bhavcopy_df[merge_columns], left_on="TckrSymb", right_on="Stock", how="left").drop(columns=["Stock"])
     
     # Calculate PCR with 2 decimal places, handle division by zero
     summary_table["PCR"] = summary_table.apply(lambda row: round(row["Total_Put_OI"] / row["Total_Call_OI"], 2) if row["Total_Call_OI"] > 0 else 0, axis=1)
     
-    # Add Delivery Percentage & PCR Filter
-    delivery_filter = st.sidebar.slider("Select Delivery Percentage Range", 0, 100, (0, 100))
-    pcr_filter = st.sidebar.slider("Select PCR Range", 0.0, 5.0, (0.0, 5.0))
-    
-    summary_table = summary_table[(summary_table["Delivery_Percentage"] >= delivery_filter[0]) & (summary_table["Delivery_Percentage"] <= delivery_filter[1])]
-    summary_table = summary_table[(summary_table["PCR"] >= pcr_filter[0]) & (summary_table["PCR"] <= pcr_filter[1])]
-    
-    # Display Enhanced Table with Larger Font Sizes
+    # Display Enhanced Table
     st.subheader(f"Stock Data for Expiry: {selected_expiry.date()}")
-    fig = go.Figure(data=[go.Table(
-        header=dict(values=list(summary_table.columns),
-                    fill_color='#1f77b4',
-                    font=dict(color='white', size=16),
-                    align='center'),
-        cells=dict(values=[summary_table[col].astype(str) for col in summary_table.columns],
-                   fill_color=['#f5f5f5', '#ffffff'],
-                   font=dict(size=14),
-                   align='center'))
-    ])
-    st.plotly_chart(fig, use_container_width=True)
+    st.dataframe(summary_table.style.set_properties(**{"font-size": "16px"}))
 else:
     st.warning("Please upload both FO and CM Bhavcopy files to proceed.")
