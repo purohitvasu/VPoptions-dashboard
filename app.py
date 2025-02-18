@@ -1,10 +1,24 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+import requests
 
 # Streamlit UI - Must be first command
 st.set_page_config(layout="wide", page_title="Options & Futures Dashboard")
+
+# Fyers API Credentials
+client_id = "your_client_id"
+access_token = "your_access_token"
+headers = {"Authorization": f"Bearer {access_token}"}
+
+# Function to fetch real-time data from Fyers API
+def fetch_fyers_data(symbol):
+    url = f"https://api.fyers.in/api/v2/market-data?symbols={symbol}"
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        data = response.json()
+        return data["d"].get(symbol, {})
+    else:
+        return {}
 
 # File Upload Section
 st.sidebar.subheader("Upload NSE Bhavcopy Data")
@@ -29,7 +43,6 @@ cm_bhavcopy_df = load_data(cm_bhavcopy_file)
 st.title("📊 Options & Futures Market Dashboard")
 
 if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
-    # Ensure required columns exist dynamically
     required_columns_fo = {"XpryDt", "TckrSymb", "ChngInOpnIntrst", "OpnIntrst", "OptnTp"}
     required_columns_cm = {"SYMBOL", "DELIV_PER", "LAST_PRICE"}
     
@@ -52,21 +65,15 @@ if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
         if col in cm_bhavcopy_df.columns:
             cm_bhavcopy_df[col] = pd.to_numeric(cm_bhavcopy_df[col], errors='coerce')
     
-    # Calculate 20 SMA for Price if LAST_PRICE exists
-    if "LAST_PRICE" in cm_bhavcopy_df.columns:
-        cm_bhavcopy_df["20_SMA"] = cm_bhavcopy_df["LAST_PRICE"].rolling(window=20).mean()
-    
-    # Calculate RSI
-    def calculate_rsi(series, period=14):
-        delta = series.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
-        return rsi
-    
-    if "LAST_PRICE" in cm_bhavcopy_df.columns:
-        cm_bhavcopy_df["RSI"] = calculate_rsi(cm_bhavcopy_df["LAST_PRICE"], period=14)
+    # Fetch real-time data for selected stock
+    selected_stock = st.sidebar.text_input("Enter Stock Symbol (e.g., NSE:RELIANCE-EQ)")
+    if selected_stock:
+        fyers_data = fetch_fyers_data(selected_stock)
+        if fyers_data:
+            st.sidebar.subheader("Real-time Data from Fyers API")
+            st.sidebar.write(f"LTP: {fyers_data.get('ltp', 'N/A')}")
+            st.sidebar.write(f"20-SMA: {fyers_data.get('sma_20', 'N/A')}")
+            st.sidebar.write(f"RSI (14): {fyers_data.get('rsi_14', 'N/A')}")
     
     # Expiry Filter
     fo_bhavcopy_df["XpryDt"] = pd.to_datetime(fo_bhavcopy_df["XpryDt"], errors='coerce')
@@ -92,7 +99,7 @@ if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
     ).reset_index()
     
     # Merge with Delivery, LTP, SMA, and RSI Data
-    merge_columns = ["Stock", "Delivery_Percentage", "LTP", "RSI", "20_SMA"]
+    merge_columns = ["Stock", "Delivery_Percentage", "LTP"]
     summary_table = summary_table.merge(cm_bhavcopy_df[merge_columns], left_on="TckrSymb", right_on="Stock", how="left").drop(columns=["Stock"])
     
     # Calculate PCR with 2 decimal places, handle division by zero
@@ -103,6 +110,6 @@ if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
     
     # Display Enhanced Table
     st.subheader(f"Stock Data for Expiry: {selected_expiry.date()}")
-    st.dataframe(summary_table[["TckrSymb", "LTP", "Delivery_Percentage", "RSI", "20_SMA", "PCR", "Change_in_Future_OI", "Future_OI", "Total_Call_OI", "Total_Put_OI"]].style.set_properties(**{"font-size": "16px"}))
+    st.dataframe(summary_table[["TckrSymb", "LTP", "Delivery_Percentage", "PCR", "Change_in_Future_OI", "Future_OI", "Total_Call_OI", "Total_Put_OI"]].style.set_properties(**{"font-size": "16px"}))
 else:
     st.warning("Please upload both FO and CM Bhavcopy files to proceed.")
