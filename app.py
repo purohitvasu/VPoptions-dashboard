@@ -1,17 +1,48 @@
 import streamlit as st
 import pandas as pd
 import requests
+import webbrowser
 
 # Streamlit UI - Must be first command
 st.set_page_config(layout="wide", page_title="Options & Futures Dashboard")
 
 # Fyers API Credentials
 client_id = "your_client_id"
-access_token = "your_access_token"
-headers = {"Authorization": f"Bearer {access_token}"}
+secret_key = "your_secret_key"
+redirect_uri = "your_redirect_url"
+access_token = None
+
+# Function to authenticate and get access token
+def authenticate_fyers():
+    global access_token
+    auth_url = f"https://api.fyers.in/api/v2/generate-authcode?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code"
+    st.sidebar.write("[Click here to authenticate Fyers](%s)" % auth_url)
+    auth_code = st.sidebar.text_input("Enter Authorization Code after authentication:")
+    
+    if auth_code:
+        token_url = "https://api.fyers.in/api/v2/token"
+        payload = {
+            "client_id": client_id,
+            "secret_key": secret_key,
+            "grant_type": "authorization_code",
+            "redirect_uri": redirect_uri,
+            "code": auth_code
+        }
+        response = requests.post(token_url, json=payload)
+        if response.status_code == 200:
+            access_token = response.json().get("access_token")
+            st.sidebar.success("Authentication Successful!")
+        else:
+            st.sidebar.error("Failed to authenticate. Please check your credentials.")
+
+authenticate_fyers()
+
+headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
 
 # Function to fetch real-time data from Fyers API
 def fetch_fyers_data(symbol):
+    if not access_token:
+        return {}
     url = f"https://api.fyers.in/api/v2/market-data?symbols={symbol}"
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
@@ -22,6 +53,8 @@ def fetch_fyers_data(symbol):
 
 # Function to fetch real-time delivery data from Fyers API
 def fetch_delivery_data(symbol):
+    if not access_token:
+        return "N/A"
     url = f"https://api.fyers.in/api/v2/market-depth?symbol={symbol}"
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
@@ -36,7 +69,7 @@ st.title("📊 Options & Futures Market Dashboard")
 
 # Fetch real-time data for selected stock
 selected_stock = st.sidebar.text_input("Enter Stock Symbol (e.g., NSE:RELIANCE-EQ)")
-if selected_stock:
+if selected_stock and access_token:
     fyers_data = fetch_fyers_data(selected_stock)
     delivery_percentage = fetch_delivery_data(selected_stock)
     if fyers_data:
@@ -46,17 +79,17 @@ if selected_stock:
         st.sidebar.write(f"RSI (14): {fyers_data.get('rsi_14', 'N/A')}")
         st.sidebar.write(f"Delivery Percentage: {delivery_percentage}%")
 
-# Remove Bhavcopy file uploads as we are now using live data
-
 # Function to fetch options chain data from Fyers API
 def fetch_options_data(symbol):
+    if not access_token:
+        return {}
     url = f"https://api.fyers.in/api/v2/options-chain?symbol={symbol}"
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         return response.json()
     return {}
 
-if selected_stock:
+if selected_stock and access_token:
     options_data = fetch_options_data(selected_stock)
     if options_data:
         st.subheader("Live Options Chain Data")
