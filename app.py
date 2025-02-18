@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 # Streamlit UI - Must be first command
 st.set_page_config(layout="wide", page_title="Options & Futures Dashboard")
@@ -80,8 +81,17 @@ if bhavcopy_df is not None and not bhavcopy_df.empty:
     summary_table["Support"] = summary_table["Stock"].apply(lambda x: get_max_oi_strike(expiry_data[expiry_data["Stock"] == x], "PE"))
     summary_table["Resistance"] = summary_table["Stock"].apply(lambda x: get_max_oi_strike(expiry_data[expiry_data["Stock"] == x], "CE"))
     
-    # Display Table
+    # Display Enhanced Table with Visualization
     st.subheader(f"Stock Data for Expiry: {selected_expiry.date()}")
-    st.dataframe(summary_table.style.format({"LTP": "{:.2f}", "Future_OI": "{:.0f}", "Change_in_Future_OI": "{:.0f}", "Total_Call_OI": "{:.0f}", "Total_Put_OI": "{:.0f}", "PCR": "{:.2f}", "Support": "{:.2f}", "Resistance": "{:.2f}"}))
+    fig = go.Figure(data=[go.Table(
+        header=dict(values=list(summary_table.columns),
+                    fill_color='#1f77b4',
+                    font=dict(color='white', size=14),
+                    align='center'),
+        cells=dict(values=[summary_table[col] for col in summary_table.columns],
+                   fill_color=['#f5f5f5', '#ffffff'],
+                   align='center'))
+    ])
+    st.plotly_chart(fig, use_container_width=True)
 else:
     st.warning("Please upload a valid NSE Bhavcopy file to proceed.")
