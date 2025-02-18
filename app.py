@@ -22,25 +22,23 @@ def process_cm_bhavcopy(file):
         st.error(f"CM Bhavcopy file is missing columns: {', '.join(missing_cols)}")
         return None
     
-    # Automatically detect delivery and total traded quantity column names
-    delivery_qty_col = "DELIV_QTY" if "DELIV_QTY" in df.columns else "DELIVERABLE_QTY" if "DELIVERABLE_QTY" in df.columns else None
-    total_qty_col = "TTL_TRD_QNTY" if "TTL_TRD_QNTY" in df.columns else "TOTAL_TRD_QTY" if "TOTAL_TRD_QTY" in df.columns else None
+    # Detect columns for delivery percentage calculation
+    delivery_qty_col = next((col for col in ["DELIV_QTY", "DELIVERABLE_QTY"] if col in df.columns), None)
+    total_qty_col = next((col for col in ["TTL_TRD_QNTY", "TOTAL_TRD_QTY"] if col in df.columns), None)
     
-    # Calculate Delivery Percentage if missing
-    if "DELIV_PER" not in df.columns:
-        if delivery_qty_col and total_qty_col:
-            df["DELIV_PER"] = (df[delivery_qty_col].astype(float) / df[total_qty_col].astype(float)) * 100
-        else:
-            st.error("CM Bhavcopy is missing required columns to calculate Delivery Percentage.")
-            return None
+    if "DELIV_PER" not in df.columns and delivery_qty_col and total_qty_col:
+        df["DELIV_PER"] = (df[delivery_qty_col].astype(float) / df[total_qty_col].astype(float)) * 100
+    elif "DELIV_PER" not in df.columns:
+        st.warning("CM Bhavcopy is missing required columns to calculate Delivery Percentage. Skipping calculation.")
+        df["DELIV_PER"] = None  # Fill with NaN to allow merging
     
     # Use CLOSE_PRICE as LTP if LAST_PRICE is missing
     if "LAST_PRICE" not in df.columns:
         if "CLOSE_PRICE" in df.columns:
             df["LAST_PRICE"] = df["CLOSE_PRICE"]
         else:
-            st.error("CM Bhavcopy is missing LAST_PRICE and CLOSE_PRICE columns.")
-            return None
+            st.warning("CM Bhavcopy is missing LAST_PRICE and CLOSE_PRICE columns. Skipping LTP calculation.")
+            df["LAST_PRICE"] = None
     
     df = df.rename(columns={"SYMBOL": "Ticker", "DELIV_PER": "Delivery_Percentage", "LAST_PRICE": "LTP"})
     df["Delivery_Percentage"] = pd.to_numeric(df["Delivery_Percentage"], errors='coerce').round(2)
