@@ -68,8 +68,8 @@ if bhavcopy_df is not None and not bhavcopy_df.empty:
         Total_Put_OI=("Total_OI", lambda x: x[expiry_data["Option_Type"] == "PE"].sum()),
     ).reset_index()
     
-    # Calculate PCR
-    summary_table["PCR"] = summary_table["Total_Put_OI"] / summary_table["Total_Call_OI"]
+    # Calculate PCR with 2 decimal places
+    summary_table["PCR"] = (summary_table["Total_Put_OI"] / summary_table["Total_Call_OI"]).round(2)
     
     # Support & Resistance Based on OI
     def get_max_oi_strike(data, option_type):
@@ -80,6 +80,10 @@ if bhavcopy_df is not None and not bhavcopy_df.empty:
     
     summary_table["Support"] = summary_table["Stock"].apply(lambda x: get_max_oi_strike(expiry_data[expiry_data["Stock"] == x], "PE"))
     summary_table["Resistance"] = summary_table["Stock"].apply(lambda x: get_max_oi_strike(expiry_data[expiry_data["Stock"] == x], "CE"))
+    
+    # Add Future OI Change Filter
+    future_oi_change_filter = st.sidebar.slider("Select Change in Future OI Range", int(summary_table["Change_in_Future_OI"].min()), int(summary_table["Change_in_Future_OI"].max()), (int(summary_table["Change_in_Future_OI"].min()), int(summary_table["Change_in_Future_OI"].max())))
+    summary_table = summary_table[(summary_table["Change_in_Future_OI"] >= future_oi_change_filter[0]) & (summary_table["Change_in_Future_OI"] <= future_oi_change_filter[1])]
     
     # Display Enhanced Table with Visualization
     st.subheader(f"Stock Data for Expiry: {selected_expiry.date()}")
