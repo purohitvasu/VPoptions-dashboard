@@ -3,6 +3,9 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
+# Streamlit UI - Must be first command
+st.set_page_config(layout="wide", page_title="Options & Futures Dashboard")
+
 # Load Data
 fo_file_path = "fo170225.csv"
 op_file_path = "op170225.csv"
@@ -19,8 +22,6 @@ def load_data():
 
 fo_df, op_df = load_data()
 
-# Streamlit UI
-st.set_page_config(layout="wide", page_title="Options & Futures Dashboard")
 st.title("📊 Options & Futures Market Dashboard")
 
 if fo_df is not None and op_df is not None:
@@ -63,3 +64,4 @@ if fo_df is not None and op_df is not None:
         st.write(summary_metrics)
     else:
         st.warning("No market insights available due to lack of data.")
+
