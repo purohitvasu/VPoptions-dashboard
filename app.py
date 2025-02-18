@@ -38,10 +38,10 @@ def authenticate_fyers():
         token_url = "https://api.fyers.in/api/v2/token"
         payload = {
             "grant_type": "authorization_code",
-            "appIdHash": client_id,
-            "secretKey": secret_key,
-            "redirectUri": redirect_uri,
-            "authCode": auth_code
+            "client_id": client_id,
+            "secret_key": secret_key,
+            "redirect_uri": redirect_uri,
+            "code": auth_code
         }
         response = requests.post(token_url, json=payload)
         if response.status_code == 200:
