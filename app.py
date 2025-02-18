@@ -1,58 +1,71 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
 # Streamlit UI - Must be first command
 st.set_page_config(layout="wide", page_title="Options & Futures Dashboard")
 
 # File Upload Section
-st.sidebar.subheader("Upload CSV Files")
-fo_file = st.sidebar.file_uploader("Upload Futures Data (fo170225.csv)", type=["csv"])
-op_file = st.sidebar.file_uploader("Upload Options Data (op170225.csv)", type=["csv"])
+st.sidebar.subheader("Upload NSE Bhavcopy Data")
+bhavcopy_file = st.sidebar.file_uploader("Upload NSE Bhavcopy Data", type=["csv"])
 
 @st.cache_data
-def load_data(fo_file, op_file):
-    if fo_file is not None and op_file is not None:
-        fo_df = pd.read_csv(fo_file)
-        op_df = pd.read_csv(op_file)
+def load_data(bhavcopy_file):
+    if bhavcopy_file is not None:
+        bhavcopy_df = pd.read_csv(bhavcopy_file)
         
         # Data Cleaning
-        fo_df = fo_df.rename(columns=str.strip)
-        op_df = op_df.rename(columns=str.strip)
+        bhavcopy_df = bhavcopy_df.rename(columns=str.strip)
         
-        fo_df["STOCK"] = fo_df["CONTRACT_D"].str.extract(r'FUTSTK(\w+)')
-        op_df["STOCK"] = op_df["CONTRACT_D"].str.extract(r'OPTSTK(\w+)')
+        # Processing Bhavcopy Data
+        bhavcopy_df = bhavcopy_df[["TradDt", "TckrSymb", "XpryDt", "OpnPric", "HghPric", "LwPric", "ClsPric", "OpnIntrst", "ChngInOpnIntrst"]]
+        bhavcopy_df = bhavcopy_df.rename(columns={
+            "TradDt": "Date", "TckrSymb": "Stock", "XpryDt": "Expiry",
+            "OpnPric": "Open", "HghPric": "High", "LwPric": "Low", "ClsPric": "Close",
+            "OpnIntrst": "Total_OI", "ChngInOpnIntrst": "Change_in_OI"
+        })
+        bhavcopy_df["Date"] = pd.to_datetime(bhavcopy_df["Date"])
+        bhavcopy_df["Expiry"] = pd.to_datetime(bhavcopy_df["Expiry"])
         
-        # Ensure correct Open Interest Calculation
-        op_df["TOTAL_OI"] = op_df["OI_NO_CON"].sum()
-        op_df["CHANGE_IN_OI"] = op_df["NET_CHANGE"].sum()
-        
-        return fo_df, op_df
+        return bhavcopy_df
     else:
-        return None, None
+        return None
 
-fo_df, op_df = load_data(fo_file, op_file)
+bhavcopy_df = load_data(bhavcopy_file)
 
 st.title("📊 Options & Futures Market Dashboard")
 
-if fo_df is not None and op_df is not None:
-    # Merge Data for a Single Filter
-    common_stocks = set(fo_df["STOCK"].dropna()).intersection(set(op_df["STOCK"].dropna()))
-    selected_stock = st.sidebar.selectbox("Select Stock", sorted(common_stocks))
+if bhavcopy_df is not None:
+    # Stock Filter
+    stock_list = sorted(bhavcopy_df["Stock"].unique())
+    selected_stock = st.sidebar.selectbox("Select Stock", stock_list)
     
-    st.subheader("Futures Open Interest")
-    filtered_fo = fo_df[fo_df["STOCK"] == selected_stock]
-    if not filtered_fo.empty:
-        st.write(f"Total Open Interest: {filtered_fo['OI_NO_CON'].sum()}")
-        st.write(f"Change in Open Interest: {filtered_fo['OI_NO_CON'].diff().iloc[-1]}")
-    else:
-        st.warning("No data available for the selected stock.")
+    # Stock Details
+    st.subheader("Stock Details: Open, High, Low, Close")
+    stock_data = bhavcopy_df[bhavcopy_df["Stock"] == selected_stock][["Date", "Open", "High", "Low", "Close"]]
+    st.dataframe(stock_data)
     
-    st.subheader("Options Open Interest")
-    filtered_op = op_df[op_df["STOCK"] == selected_stock]
-    if not filtered_op.empty:
-        st.write(f"Total Open Interest: {filtered_op['TOTAL_OI'].iloc[0]}")
-        st.write(f"Change in Open Interest: {filtered_op['CHANGE_IN_OI'].iloc[0]}")
+    # Futures Data - Expiry Wise
+    st.subheader("Futures Open Interest - Expiry Wise")
+    futures_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock)].groupby("Expiry")["Total_OI", "Change_in_OI"].sum().reset_index()
+    st.dataframe(futures_data)
+    
+    # Options Data - Expiry Wise
+    st.subheader("Options Open Interest - Expiry Wise")
+    options_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock)].groupby(["Expiry", "Stock"])["Total_OI", "Change_in_OI"].sum().reset_index()
+    st.dataframe(options_data)
+    
+    # Support & Resistance Based on OI
+    st.subheader("Support & Resistance Levels")
+    ce_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (bhavcopy_df["Total_OI"] > 0)]
+    pe_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (bhavcopy_df["Total_OI"] > 0)]
+    
+    if not ce_data.empty and not pe_data.empty:
+        max_ce_oi = ce_data.loc[ce_data["Total_OI"].idxmax(), "Close"]
+        max_pe_oi = pe_data.loc[pe_data["Total_OI"].idxmax(), "Close"]
+        st.write(f"🔹 Resistance Level (Max CE OI): {max_ce_oi}")
+        st.write(f"🔹 Support Level (Max PE OI): {max_pe_oi}")
     else:
-        st.warning("No options data available.")
+        st.warning("Not enough OI data to determine Support & Resistance levels.")
 else:
-    st.warning("Please upload both Futures and Options CSV files to proceed.")
+    st.warning("Please upload NSE Bhavcopy data to proceed.")
