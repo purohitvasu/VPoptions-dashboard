@@ -55,54 +55,33 @@ if bhavcopy_df is not None and not bhavcopy_df.empty:
         st.warning("No valid expiry dates found in the uploaded file.")
         st.stop()
     
-    # Stock Filter
-    stock_list = sorted(bhavcopy_df[bhavcopy_df["Expiry"] == selected_expiry]["Stock"].dropna().unique())
-    if stock_list:
-        selected_stock = st.sidebar.selectbox("Select Stock", stock_list)
-    else:
-        st.warning("No valid stock data found for the selected expiry.")
-        st.stop()
+    # Filter data based on selected expiry
+    expiry_data = bhavcopy_df[bhavcopy_df["Expiry"] == selected_expiry]
     
-    bhavcopy_df = bhavcopy_df[bhavcopy_df["Expiry"] == selected_expiry]
+    # Aggregate Data for Table
+    summary_table = expiry_data.groupby("Stock").agg(
+        LTP=("Close", "last"),
+        Future_OI=("Total_OI", "sum"),
+        Change_in_Future_OI=("Change_in_OI", "sum"),
+        Total_Call_OI=("Total_OI", lambda x: x[expiry_data["Option_Type"] == "CE"].sum()),
+        Total_Put_OI=("Total_OI", lambda x: x[expiry_data["Option_Type"] == "PE"].sum()),
+    ).reset_index()
     
-    # Stock Details (Futures OHLC only)
-    st.subheader(f"Stock Details: Futures Open, High, Low, Close (Expiry: {selected_expiry.date()})")
-    stock_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (bhavcopy_df["Option_Type"].isna())][["Date", "Open", "High", "Low", "Close"]]
-    if stock_data.empty:
-        st.warning("No futures data available for this stock.")
-    else:
-        st.dataframe(stock_data.style.format({"Open": "{:.2f}", "High": "{:.2f}", "Low": "{:.2f}", "Close": "{:.2f}"}))
-    
-    # Futures Data - Expiry Wise
-    st.subheader("Futures Open Interest - Selected Expiry")
-    futures_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (bhavcopy_df["Option_Type"].isna())].groupby("Expiry")[["Total_OI", "Change_in_OI"]].sum().reset_index()
-    if futures_data.empty:
-        st.warning("No futures open interest data available.")
-    else:
-        st.dataframe(futures_data)
-    
-    # Options Data - Expiry Wise
-    st.subheader("Options Open Interest - Selected Expiry")
-    options_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (~bhavcopy_df["Option_Type"].isna())].groupby(["Expiry", "Strike_Price", "Option_Type"])[["Total_OI", "Change_in_OI"]].sum().reset_index()
-    if options_data.empty:
-        st.warning("No options open interest data available.")
-    else:
-        st.dataframe(options_data)
+    # Calculate PCR
+    summary_table["PCR"] = summary_table["Total_Put_OI"] / summary_table["Total_Call_OI"]
     
     # Support & Resistance Based on OI
-    st.subheader("Support & Resistance Levels")
-    if not options_data.empty:
-        ce_data = options_data[options_data["Option_Type"] == "CE"]
-        pe_data = options_data[options_data["Option_Type"] == "PE"]
-        
-        if not ce_data.empty and not pe_data.empty:
-            max_ce_oi = ce_data.loc[ce_data["Total_OI"].idxmax(), "Strike_Price"]
-            max_pe_oi = pe_data.loc[pe_data["Total_OI"].idxmax(), "Strike_Price"]
-            st.write(f"🔹 Resistance Level (Max CE OI): {max_ce_oi}")
-            st.write(f"🔹 Support Level (Max PE OI): {max_pe_oi}")
-        else:
-            st.warning("Not enough OI data to determine Support & Resistance levels.")
-    else:
-        st.warning("Options data is empty.")
+    def get_max_oi_strike(data, option_type):
+        filtered_data = data[data["Option_Type"] == option_type]
+        if not filtered_data.empty:
+            return filtered_data.loc[filtered_data["Total_OI"].idxmax(), "Strike_Price"]
+        return None
+    
+    summary_table["Support"] = summary_table["Stock"].apply(lambda x: get_max_oi_strike(expiry_data[expiry_data["Stock"] == x], "PE"))
+    summary_table["Resistance"] = summary_table["Stock"].apply(lambda x: get_max_oi_strike(expiry_data[expiry_data["Stock"] == x], "CE"))
+    
+    # Display Table
+    st.subheader(f"Stock Data for Expiry: {selected_expiry.date()}")
+    st.dataframe(summary_table.style.format({"LTP": "{:.2f}", "Future_OI": "{:.0f}", "Change_in_Future_OI": "{:.0f}", "Total_Call_OI": "{:.0f}", "Total_Put_OI": "{:.0f}", "PCR": "{:.2f}", "Support": "{:.2f}", "Resistance": "{:.2f}"}))
 else:
     st.warning("Please upload a valid NSE Bhavcopy file to proceed.")
