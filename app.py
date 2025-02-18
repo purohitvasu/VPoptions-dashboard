@@ -62,25 +62,34 @@ if bhavcopy_df is not None and not bhavcopy_df.empty:
     
     # Futures Data - Expiry Wise
     st.subheader("Futures Open Interest - Expiry Wise")
-    futures_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (bhavcopy_df["Option_Type"].isna())].groupby("Expiry")["Total_OI", "Change_in_OI"].sum().reset_index()
-    st.dataframe(futures_data)
+    if "Total_OI" in bhavcopy_df.columns and "Change_in_OI" in bhavcopy_df.columns:
+        futures_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (bhavcopy_df["Option_Type"].isna())].groupby("Expiry")[["Total_OI", "Change_in_OI"]].sum().reset_index()
+        st.dataframe(futures_data)
+    else:
+        st.warning("Futures data columns missing.")
     
     # Options Data - Expiry Wise
     st.subheader("Options Open Interest - Expiry Wise")
-    options_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (~bhavcopy_df["Option_Type"].isna())].groupby(["Expiry", "Strike_Price", "Option_Type"])["Total_OI", "Change_in_OI"].sum().reset_index()
-    st.dataframe(options_data)
+    if "Total_OI" in bhavcopy_df.columns and "Change_in_OI" in bhavcopy_df.columns and "Strike_Price" in bhavcopy_df.columns:
+        options_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (~bhavcopy_df["Option_Type"].isna())].groupby(["Expiry", "Strike_Price", "Option_Type"])[["Total_OI", "Change_in_OI"]].sum().reset_index()
+        st.dataframe(options_data)
+    else:
+        st.warning("Options data columns missing.")
     
     # Support & Resistance Based on OI
     st.subheader("Support & Resistance Levels")
-    ce_data = options_data[options_data["Option_Type"] == "CE"]
-    pe_data = options_data[options_data["Option_Type"] == "PE"]
-    
-    if not ce_data.empty and not pe_data.empty:
-        max_ce_oi = ce_data.loc[ce_data["Total_OI"].idxmax(), "Strike_Price"]
-        max_pe_oi = pe_data.loc[pe_data["Total_OI"].idxmax(), "Strike_Price"]
-        st.write(f"🔹 Resistance Level (Max CE OI): {max_ce_oi}")
-        st.write(f"🔹 Support Level (Max PE OI): {max_pe_oi}")
+    if not options_data.empty:
+        ce_data = options_data[options_data["Option_Type"] == "CE"]
+        pe_data = options_data[options_data["Option_Type"] == "PE"]
+        
+        if not ce_data.empty and not pe_data.empty:
+            max_ce_oi = ce_data.loc[ce_data["Total_OI"].idxmax(), "Strike_Price"]
+            max_pe_oi = pe_data.loc[pe_data["Total_OI"].idxmax(), "Strike_Price"]
+            st.write(f"🔹 Resistance Level (Max CE OI): {max_ce_oi}")
+            st.write(f"🔹 Support Level (Max PE OI): {max_pe_oi}")
+        else:
+            st.warning("Not enough OI data to determine Support & Resistance levels.")
     else:
-        st.warning("Not enough OI data to determine Support & Resistance levels.")
+        st.warning("Options data is empty.")
 else:
     st.warning("Please upload a valid NSE Bhavcopy file to proceed.")
