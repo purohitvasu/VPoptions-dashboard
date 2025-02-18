@@ -14,7 +14,7 @@ fo_bhavcopy = st.sidebar.file_uploader("Upload FO Bhav Copy", type=["csv"])
 # Process the uploaded files
 def process_cm_bhavcopy(file):
     df = pd.read_csv(file)
-    required_columns = {"SYMBOL": "Ticker"}
+    required_columns = {"SYMBOL": "Ticker", "DELIV_PER": "Delivery_Percentage", "LAST_PRICE": "LTP"}
     
     # Check for missing columns
     missing_cols = [col for col in required_columns if col not in df.columns]
@@ -22,25 +22,7 @@ def process_cm_bhavcopy(file):
         st.error(f"CM Bhavcopy file is missing columns: {', '.join(missing_cols)}")
         return None
     
-    # Detect columns for delivery percentage calculation
-    delivery_qty_col = next((col for col in ["DELIV_QTY", "DELIVERABLE_QTY"] if col in df.columns), None)
-    total_qty_col = next((col for col in ["TTL_TRD_QNTY", "TOTAL_TRD_QTY"] if col in df.columns), None)
-    
-    if "DELIV_PER" not in df.columns and delivery_qty_col and total_qty_col:
-        df["DELIV_PER"] = (df[delivery_qty_col].astype(float) / df[total_qty_col].astype(float)) * 100
-    elif "DELIV_PER" not in df.columns:
-        st.warning("CM Bhavcopy is missing required columns to calculate Delivery Percentage. Skipping calculation.")
-        df["DELIV_PER"] = None  # Fill with NaN to allow merging
-    
-    # Use CLOSE_PRICE as LTP if LAST_PRICE is missing
-    if "LAST_PRICE" not in df.columns:
-        if "CLOSE_PRICE" in df.columns:
-            df["LAST_PRICE"] = df["CLOSE_PRICE"]
-        else:
-            st.warning("CM Bhavcopy is missing LAST_PRICE and CLOSE_PRICE columns. Skipping LTP calculation.")
-            df["LAST_PRICE"] = None
-    
-    df = df.rename(columns={"SYMBOL": "Ticker", "DELIV_PER": "Delivery_Percentage", "LAST_PRICE": "LTP"})
+    df = df.rename(columns=required_columns)
     df["Delivery_Percentage"] = pd.to_numeric(df["Delivery_Percentage"], errors='coerce').round(2)
     df["LTP"] = pd.to_numeric(df["LTP"], errors='coerce').round(2)
     return df[["Ticker", "LTP", "Delivery_Percentage"]]
