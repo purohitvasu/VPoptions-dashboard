@@ -20,96 +20,64 @@ def fetch_fyers_data(symbol):
     else:
         return {}
 
-# File Upload Section
-st.sidebar.subheader("Upload NSE Bhavcopy Data")
-fo_bhavcopy_file = st.sidebar.file_uploader("Upload NSE FO Bhavcopy Data", type=["csv"])
-cm_bhavcopy_file = st.sidebar.file_uploader("Upload NSE CM Bhavcopy Data", type=["csv"])
-
-@st.cache_data
-def load_data(file):
-    if file is not None:
-        try:
-            df = pd.read_csv(file, dtype=str)  # Ensure all data is read as string to prevent parsing errors
-            df = df.rename(columns=str.strip)
-            return df
-        except Exception as e:
-            st.error(f"Error processing file: {e}")
-            return None
-    return None
-
-fo_bhavcopy_df = load_data(fo_bhavcopy_file)
-cm_bhavcopy_df = load_data(cm_bhavcopy_file)
+# Function to fetch real-time delivery data from Fyers API
+def fetch_delivery_data(symbol):
+    url = f"https://api.fyers.in/api/v2/market-depth?symbol={symbol}"
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        data = response.json()
+        total_volume = data["d"][symbol].get("volume", 0)
+        delivery_quantity = data["d"][symbol].get("delivery_quantity", 0)
+        delivery_percentage = (delivery_quantity / total_volume * 100) if total_volume else 0
+        return round(delivery_percentage, 2)
+    return "N/A"
 
 st.title("📊 Options & Futures Market Dashboard")
 
-if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
-    required_columns_fo = {"XpryDt", "TckrSymb", "ChngInOpnIntrst", "OpnIntrst", "OptnTp"}
-    required_columns_cm = {"SYMBOL", "DELIV_PER", "LAST_PRICE"}
-    
-    missing_columns_fo = required_columns_fo - set(fo_bhavcopy_df.columns)
-    missing_columns_cm = required_columns_cm - set(cm_bhavcopy_df.columns)
-    
-    if missing_columns_fo:
-        st.error(f"FO Bhavcopy file is missing required columns: {', '.join(missing_columns_fo)}")
-        st.stop()
-    
-    if missing_columns_cm:
-        st.error(f"CM Bhavcopy file is missing required columns: {', '.join(missing_columns_cm)}")
-        st.stop()
-    
-    # Convert necessary columns to correct data types
-    numeric_columns = ["ChngInOpnIntrst", "OpnIntrst", "DELIV_PER", "LAST_PRICE"]
-    for col in numeric_columns:
-        if col in fo_bhavcopy_df.columns:
-            fo_bhavcopy_df[col] = pd.to_numeric(fo_bhavcopy_df[col], errors='coerce')
-        if col in cm_bhavcopy_df.columns:
-            cm_bhavcopy_df[col] = pd.to_numeric(cm_bhavcopy_df[col], errors='coerce')
-    
-    # Fetch real-time data for selected stock
-    selected_stock = st.sidebar.text_input("Enter Stock Symbol (e.g., NSE:RELIANCE-EQ)")
-    if selected_stock:
-        fyers_data = fetch_fyers_data(selected_stock)
-        if fyers_data:
-            st.sidebar.subheader("Real-time Data from Fyers API")
-            st.sidebar.write(f"LTP: {fyers_data.get('ltp', 'N/A')}")
-            st.sidebar.write(f"20-SMA: {fyers_data.get('sma_20', 'N/A')}")
-            st.sidebar.write(f"RSI (14): {fyers_data.get('rsi_14', 'N/A')}")
-    
-    # Expiry Filter
-    fo_bhavcopy_df["XpryDt"] = pd.to_datetime(fo_bhavcopy_df["XpryDt"], errors='coerce')
-    expiry_list = sorted(fo_bhavcopy_df["XpryDt"].dropna().unique())
-    if expiry_list:
-        selected_expiry = st.sidebar.selectbox("Select Expiry", expiry_list, format_func=lambda x: x.strftime('%Y-%m-%d'))
-    else:
-        st.warning("No valid expiry dates found in the uploaded FO Bhavcopy file.")
-        st.stop()
-    
-    # Filter FO data based on selected expiry
-    fo_expiry_data = fo_bhavcopy_df[fo_bhavcopy_df["XpryDt"] == selected_expiry]
-    
-    # Merge FO and CM Data on Stock Name
-    cm_bhavcopy_df = cm_bhavcopy_df.rename(columns={"SYMBOL": "Stock", "DELIV_PER": "Delivery_Percentage", "LAST_PRICE": "LTP"})
-    
-    # Aggregate FO data
-    summary_table = fo_expiry_data.groupby("TckrSymb").agg(
-        Change_in_Future_OI=("ChngInOpnIntrst", "sum"),
-        Future_OI=("OpnIntrst", "sum"),
-        Total_Call_OI=("OpnIntrst", lambda x: x[fo_expiry_data["OptnTp"] == "CE"].sum() if "CE" in fo_expiry_data["OptnTp"].values else 0),
-        Total_Put_OI=("OpnIntrst", lambda x: x[fo_expiry_data["OptnTp"] == "PE"].sum() if "PE" in fo_expiry_data["OptnTp"].values else 0),
-    ).reset_index()
-    
-    # Merge with Delivery, LTP, SMA, and RSI Data
-    merge_columns = ["Stock", "Delivery_Percentage", "LTP"]
-    summary_table = summary_table.merge(cm_bhavcopy_df[merge_columns], left_on="TckrSymb", right_on="Stock", how="left").drop(columns=["Stock"])
-    
-    # Calculate PCR with 2 decimal places, handle division by zero
-    summary_table["PCR"] = summary_table.apply(lambda row: round(row["Total_Put_OI"] / row["Total_Call_OI"], 2) if row["Total_Call_OI"] > 0 else 0, axis=1)
-    
-    # Format all numeric columns to two decimal places
-    summary_table = summary_table.round(2)
-    
-    # Display Enhanced Table
-    st.subheader(f"Stock Data for Expiry: {selected_expiry.date()}")
-    st.dataframe(summary_table[["TckrSymb", "LTP", "Delivery_Percentage", "PCR", "Change_in_Future_OI", "Future_OI", "Total_Call_OI", "Total_Put_OI"]].style.set_properties(**{"font-size": "16px"}))
-else:
-    st.warning("Please upload both FO and CM Bhavcopy files to proceed.")
+# Fetch real-time data for selected stock
+selected_stock = st.sidebar.text_input("Enter Stock Symbol (e.g., NSE:RELIANCE-EQ)")
+if selected_stock:
+    fyers_data = fetch_fyers_data(selected_stock)
+    delivery_percentage = fetch_delivery_data(selected_stock)
+    if fyers_data:
+        st.sidebar.subheader("Real-time Data from Fyers API")
+        st.sidebar.write(f"LTP: {fyers_data.get('ltp', 'N/A')}")
+        st.sidebar.write(f"20-SMA: {fyers_data.get('sma_20', 'N/A')}")
+        st.sidebar.write(f"RSI (14): {fyers_data.get('rsi_14', 'N/A')}")
+        st.sidebar.write(f"Delivery Percentage: {delivery_percentage}%")
+
+# Remove Bhavcopy file uploads as we are now using live data
+
+# Function to fetch options chain data from Fyers API
+def fetch_options_data(symbol):
+    url = f"https://api.fyers.in/api/v2/options-chain?symbol={symbol}"
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.json()
+    return {}
+
+if selected_stock:
+    options_data = fetch_options_data(selected_stock)
+    if options_data:
+        st.subheader("Live Options Chain Data")
+        call_oi = options_data["CE"].get("open_interest", "N/A")
+        put_oi = options_data["PE"].get("open_interest", "N/A")
+        change_in_oi = options_data["CE"].get("change_oi", "N/A")
+        pcr = round(put_oi / call_oi, 2) if call_oi and put_oi else "N/A"
+
+        # Display Options Data
+        options_df = pd.DataFrame({
+            "Stock": [selected_stock],
+            "LTP": [fyers_data.get("ltp", "N/A")],
+            "Delivery %": [delivery_percentage],
+            "20-SMA": [fyers_data.get("sma_20", "N/A")],
+            "RSI": [fyers_data.get("rsi_14", "N/A")],
+            "PCR": [pcr],
+            "Change in Future OI": [change_in_oi],
+            "Total Call OI": [call_oi],
+            "Total Put OI": [put_oi]
+        })
+
+        # Format data and display
+        options_df = options_df.round(2)
+        st.dataframe(options_df.style.set_properties(**{"font-size": "16px"}))
