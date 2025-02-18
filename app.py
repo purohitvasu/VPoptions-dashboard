@@ -30,7 +30,7 @@ st.title("📊 Options & Futures Market Dashboard")
 
 if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
     # Ensure required columns exist dynamically
-    required_columns_fo = {"XpryDt", "TckrSymb", "ClsPric", "OpnIntrst", "ChngInOpnIntrst", "OptnTp"}
+    required_columns_fo = {"XpryDt", "TckrSymb", "ChngInOpnIntrst"}
     required_columns_cm = {"SYMBOL", "DELIV_PER", "LAST_PRICE"}
     
     missing_columns_fo = required_columns_fo - set(fo_bhavcopy_df.columns)
@@ -45,7 +45,7 @@ if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
         st.stop()
     
     # Convert necessary columns to correct data types
-    numeric_columns = ["ClsPric", "OpnIntrst", "ChngInOpnIntrst", "DELIV_PER", "LAST_PRICE"]
+    numeric_columns = ["ChngInOpnIntrst", "DELIV_PER", "LAST_PRICE"]
     for col in numeric_columns:
         if col in fo_bhavcopy_df.columns:
             fo_bhavcopy_df[col] = pd.to_numeric(fo_bhavcopy_df[col], errors='coerce')
@@ -83,31 +83,15 @@ if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
     # Merge FO and CM Data on Stock Name
     cm_bhavcopy_df = cm_bhavcopy_df.rename(columns={"SYMBOL": "Stock", "DELIV_PER": "Delivery_Percentage", "LAST_PRICE": "LTP"})
     
-    # Ensure Option Type is handled correctly to avoid errors
-    fo_expiry_data = fo_expiry_data.assign(OptnTp=fo_expiry_data["OptnTp"].fillna(""))
-    
-    summary_table = fo_expiry_data.groupby("TckrSymb").agg(
-        Future_OI=("OpnIntrst", "sum"),
-        Change_in_Future_OI=("ChngInOpnIntrst", "sum"),
-        Total_Call_OI=("OpnIntrst", lambda x: x[fo_expiry_data["OptnTp"] == "CE"].sum() if "CE" in fo_expiry_data["OptnTp"].values else 0),
-        Total_Put_OI=("OpnIntrst", lambda x: x[fo_expiry_data["OptnTp"] == "PE"].sum() if "PE" in fo_expiry_data["OptnTp"].values else 0),
-    ).reset_index()
-    
     # Merge with Delivery, LTP, SMA, and RSI Data
-    merge_columns = ["Stock", "Delivery_Percentage", "LTP", "RSI"]
-    if "20_SMA" in cm_bhavcopy_df.columns:
-        merge_columns.append("20_SMA")
-    
-    summary_table = summary_table.merge(cm_bhavcopy_df[merge_columns], left_on="TckrSymb", right_on="Stock", how="left").drop(columns=["Stock"])
+    merge_columns = ["Stock", "Delivery_Percentage", "LTP", "RSI", "20_SMA"]
+    summary_table = fo_expiry_data.merge(cm_bhavcopy_df[merge_columns], left_on="TckrSymb", right_on="Stock", how="left").drop(columns=["Stock"])
     
     # Format all numeric columns to two decimal places
     summary_table = summary_table.round(2)
     
-    # Calculate PCR with 2 decimal places, handle division by zero
-    summary_table["PCR"] = summary_table.apply(lambda row: round(row["Total_Put_OI"] / row["Total_Call_OI"], 2) if row["Total_Call_OI"] > 0 else 0, axis=1)
-    
     # Display Enhanced Table
     st.subheader(f"Stock Data for Expiry: {selected_expiry.date()}")
-    st.dataframe(summary_table.style.set_properties(**{"font-size": "16px"}))
+    st.dataframe(summary_table[["TckrSymb", "LTP", "Delivery_Percentage", "RSI", "20_SMA", "ChngInOpnIntrst"]].style.set_properties(**{"font-size": "16px"}))
 else:
     st.warning("Please upload both FO and CM Bhavcopy files to proceed.")
