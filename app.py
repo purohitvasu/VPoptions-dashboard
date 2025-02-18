@@ -34,7 +34,7 @@ def process_cm_bhavcopy(file):
 
 def process_fo_bhavcopy(file):
     df = pd.read_csv(file)
-    required_columns = {"TckrSymb": "Ticker", "ChngInOpnIntrst": "Change_in_Future_OI", "OpnIntrst": "Future_OI"}
+    required_columns = {"TckrSymb": "Ticker", "ChngInOpnIntrst": "Change_in_Future_OI", "OpnIntrst": "Future_OI", "XpryDt": "Expiry", "OptnTp": "Option_Type"}
     
     # Rename available columns
     df = df.rename(columns={k: v for k, v in required_columns.items() if k in df.columns})
@@ -46,18 +46,30 @@ def process_fo_bhavcopy(file):
     if "Future_OI" in df.columns:
         df["Future_OI"] = pd.to_numeric(df["Future_OI"], errors='coerce').round(2)
     
-    if "Future_OI" in df.columns and "Change_in_Future_OI" in df.columns:
-        df["PCR"] = df.apply(lambda row: round(row["Future_OI"] / row["Change_in_Future_OI"], 2) if row["Change_in_Future_OI"] > 0 else 0, axis=1)
-    else:
-        df["PCR"] = None
+    if "Expiry" in df.columns:
+        df["Expiry"] = pd.to_datetime(df["Expiry"], errors='coerce')
     
-    return df[[col for col in ["Ticker", "Change_in_Future_OI", "Future_OI", "PCR"] if col in df.columns]]
+    # Calculate total call OI and total put OI
+    if "Option_Type" in df.columns:
+        total_call_oi = df[df["Option_Type"] == "CE"].groupby("Ticker")["Future_OI"].sum().rename("Total_Call_OI")
+        total_put_oi = df[df["Option_Type"] == "PE"].groupby("Ticker")["Future_OI"].sum().rename("Total_Put_OI")
+        df = df.merge(total_call_oi, on="Ticker", how="left").merge(total_put_oi, on="Ticker", how="left")
+        df["PCR"] = (df["Total_Put_OI"] / df["Total_Call_OI"]).round(2)
+    
+    return df[[col for col in ["Ticker", "Expiry", "Change_in_Future_OI", "Future_OI", "Total_Call_OI", "Total_Put_OI", "PCR"] if col in df.columns]]
 
 if cm_bhavcopy and fo_bhavcopy:
     cm_data = process_cm_bhavcopy(cm_bhavcopy)
     fo_data = process_fo_bhavcopy(fo_bhavcopy)
     
     if cm_data is not None and fo_data is not None:
+        # Expiry Filter
+        expiry_list = sorted(fo_data["Expiry"].dropna().unique()) if "Expiry" in fo_data.columns else []
+        selected_expiry = st.sidebar.selectbox("Select Expiry", expiry_list, format_func=lambda x: x.strftime('%Y-%m-%d')) if expiry_list else None
+        
+        if selected_expiry is not None:
+            fo_data = fo_data[fo_data["Expiry"] == selected_expiry]
+        
         # Merge CM and FO Data on Ticker
         merged_data = cm_data.merge(fo_data, on="Ticker", how="left")
         
