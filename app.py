@@ -56,6 +56,18 @@ if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
     if "LAST_PRICE" in cm_bhavcopy_df.columns:
         cm_bhavcopy_df["20_SMA"] = cm_bhavcopy_df["LAST_PRICE"].rolling(window=20).mean()
     
+    # Calculate RSI
+    def calculate_rsi(series, period=14):
+        delta = series.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        return rsi
+    
+    if "LAST_PRICE" in cm_bhavcopy_df.columns:
+        cm_bhavcopy_df["RSI"] = calculate_rsi(cm_bhavcopy_df["LAST_PRICE"], period=14)
+    
     # Expiry Filter
     fo_bhavcopy_df["XpryDt"] = pd.to_datetime(fo_bhavcopy_df["XpryDt"], errors='coerce')
     expiry_list = sorted(fo_bhavcopy_df["XpryDt"].dropna().unique())
@@ -81,12 +93,15 @@ if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
         Total_Put_OI=("OpnIntrst", lambda x: x[fo_expiry_data["OptnTp"] == "PE"].sum() if "PE" in fo_expiry_data["OptnTp"].values else 0),
     ).reset_index()
     
-    # Merge with Delivery, LTP, SMA Data
-    merge_columns = ["Stock", "Delivery_Percentage", "LTP"]
+    # Merge with Delivery, LTP, SMA, and RSI Data
+    merge_columns = ["Stock", "Delivery_Percentage", "LTP", "RSI"]
     if "20_SMA" in cm_bhavcopy_df.columns:
         merge_columns.append("20_SMA")
     
     summary_table = summary_table.merge(cm_bhavcopy_df[merge_columns], left_on="TckrSymb", right_on="Stock", how="left").drop(columns=["Stock"])
+    
+    # Format all numeric columns to two decimal places
+    summary_table = summary_table.round(2)
     
     # Calculate PCR with 2 decimal places, handle division by zero
     summary_table["PCR"] = summary_table.apply(lambda row: round(row["Total_Put_OI"] / row["Total_Call_OI"], 2) if row["Total_Call_OI"] > 0 else 0, axis=1)
