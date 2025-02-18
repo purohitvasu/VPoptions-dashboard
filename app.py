@@ -8,85 +8,60 @@ st.set_page_config(layout="wide", page_title="Options & Futures Dashboard")
 
 # File Upload Section
 st.sidebar.subheader("Upload NSE Bhavcopy Data")
-bhavcopy_file = st.sidebar.file_uploader("Upload NSE Bhavcopy Data", type=["csv"])
+fo_bhavcopy_file = st.sidebar.file_uploader("Upload NSE FO Bhavcopy Data", type=["csv"])
+cm_bhavcopy_file = st.sidebar.file_uploader("Upload NSE CM Bhavcopy Data", type=["csv"])
 
 @st.cache_data
-def load_data(bhavcopy_file):
-    if bhavcopy_file is not None:
+def load_data(file):
+    if file is not None:
         try:
-            bhavcopy_df = pd.read_csv(bhavcopy_file)
-            
-            # Data Cleaning
-            bhavcopy_df = bhavcopy_df.rename(columns=str.strip)
-            
-            # Ensure required columns exist
-            required_columns = {"TradDt": "Date", "TckrSymb": "Stock", "XpryDt": "Expiry",
-                                "OpnPric": "Open", "HghPric": "High", "LwPric": "Low", "ClsPric": "Close",
-                                "OpnIntrst": "Total_OI", "ChngInOpnIntrst": "Change_in_OI", "OptnTp": "Option_Type", "StrkPric": "Strike_Price", "FinInstrmTp": "Instrument_Type"}
-            
-            missing_columns = [col for col in required_columns.keys() if col not in bhavcopy_df.columns]
-            if missing_columns:
-                st.error(f"Missing required columns: {', '.join(missing_columns)}")
-                return None
-            
-            bhavcopy_df = bhavcopy_df.rename(columns=required_columns)
-            bhavcopy_df["Date"] = pd.to_datetime(bhavcopy_df["Date"], errors='coerce')
-            bhavcopy_df["Expiry"] = pd.to_datetime(bhavcopy_df["Expiry"], errors='coerce')
-            
-            # Filter valid data
-            bhavcopy_df = bhavcopy_df.dropna(subset=["Stock", "Expiry", "Total_OI", "Change_in_OI"])
-            
-            return bhavcopy_df
+            df = pd.read_csv(file)
+            df = df.rename(columns=str.strip)
+            return df
         except Exception as e:
             st.error(f"Error processing file: {e}")
             return None
-    else:
-        return None
+    return None
 
-bhavcopy_df = load_data(bhavcopy_file)
+fo_bhavcopy_df = load_data(fo_bhavcopy_file)
+cm_bhavcopy_df = load_data(cm_bhavcopy_file)
 
 st.title("📊 Options & Futures Market Dashboard")
 
-if bhavcopy_df is not None and not bhavcopy_df.empty:
+if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
     # Expiry Filter
-    expiry_list = sorted(bhavcopy_df["Expiry"].dropna().unique())
+    expiry_list = sorted(fo_bhavcopy_df["XpryDt"].dropna().unique())
     if expiry_list:
-        selected_expiry = st.sidebar.selectbox("Select Expiry", expiry_list, format_func=lambda x: x.strftime('%Y-%m-%d'))
+        selected_expiry = st.sidebar.selectbox("Select Expiry", expiry_list, format_func=lambda x: pd.to_datetime(x).strftime('%Y-%m-%d'))
     else:
-        st.warning("No valid expiry dates found in the uploaded file.")
+        st.warning("No valid expiry dates found in the uploaded FO Bhavcopy file.")
         st.stop()
     
-    # Filter data based on selected expiry
-    expiry_data = bhavcopy_df[bhavcopy_df["Expiry"] == selected_expiry]
+    # Filter FO data based on selected expiry
+    fo_expiry_data = fo_bhavcopy_df[fo_bhavcopy_df["XpryDt"] == selected_expiry]
     
-    # Aggregate Data for Table
-    summary_table = expiry_data.groupby("Stock").agg(
-        LTP=("Close", lambda x: x[expiry_data["Instrument_Type"] == "STF"].iloc[-1] if not x[expiry_data["Instrument_Type"] == "STF"].empty else x.iloc[-1]),
-        Future_OI=("Total_OI", "sum"),
-        Change_in_Future_OI=("Change_in_OI", "sum"),
-        Total_Call_OI=("Total_OI", lambda x: x[expiry_data["Option_Type"] == "CE"].sum()),
-        Total_Put_OI=("Total_OI", lambda x: x[expiry_data["Option_Type"] == "PE"].sum()),
+    # Merge FO and CM Data on Stock Name
+    cm_bhavcopy_df = cm_bhavcopy_df.rename(columns={"SYMBOL": "Stock", "DELIV_PER": "Delivery_Percentage"})
+    summary_table = fo_expiry_data.groupby("TckrSymb").agg(
+        LTP=("ClsPric", "last"),
+        Future_OI=("OpnIntrst", "sum"),
+        Change_in_Future_OI=("ChngInOpnIntrst", "sum"),
+        Total_Call_OI=("OpnIntrst", lambda x: x[fo_expiry_data["OptnTp"] == "CE"].sum()),
+        Total_Put_OI=("OpnIntrst", lambda x: x[fo_expiry_data["OptnTp"] == "PE"].sum()),
     ).reset_index()
+    
+    # Merge with Delivery Data
+    summary_table = summary_table.merge(cm_bhavcopy_df[["Stock", "Delivery_Percentage"]], left_on="TckrSymb", right_on="Stock", how="left").drop(columns=["Stock"])
     
     # Calculate PCR with 2 decimal places
     summary_table["PCR"] = (summary_table["Total_Put_OI"] / summary_table["Total_Call_OI"]).round(2)
     
-    # Support & Resistance Based on OI
-    def get_max_oi_strike(data, option_type):
-        filtered_data = data[data["Option_Type"] == option_type]
-        if not filtered_data.empty:
-            return filtered_data.loc[filtered_data["Total_OI"].idxmax(), "Strike_Price"]
-        return None
-    
-    summary_table["Support"] = summary_table["Stock"].apply(lambda x: get_max_oi_strike(expiry_data[expiry_data["Stock"] == x], "PE"))
-    summary_table["Resistance"] = summary_table["Stock"].apply(lambda x: get_max_oi_strike(expiry_data[expiry_data["Stock"] == x], "CE"))
-    
-    # Add Future OI Change Filter
-    future_oi_change_filter = st.sidebar.slider("Select Change in Future OI Range", int(summary_table["Change_in_Future_OI"].min()), int(summary_table["Change_in_Future_OI"].max()), (int(summary_table["Change_in_Future_OI"].min()), int(summary_table["Change_in_Future_OI"].max())))
-    summary_table = summary_table[(summary_table["Change_in_Future_OI"] >= future_oi_change_filter[0]) & (summary_table["Change_in_Future_OI"] <= future_oi_change_filter[1])]
+    # Add Delivery Percentage Filter
+    delivery_filter = st.sidebar.slider("Select Delivery Percentage Range", 0, 100, (0, 100))
+    summary_table = summary_table[(summary_table["Delivery_Percentage"] >= delivery_filter[0]) & (summary_table["Delivery_Percentage"] <= delivery_filter[1])]
     
     # Display Enhanced Table with Visualization
-    st.subheader(f"Stock Data for Expiry: {selected_expiry.date()}")
+    st.subheader(f"Stock Data for Expiry: {pd.to_datetime(selected_expiry).date()}")
     fig = go.Figure(data=[go.Table(
         header=dict(values=list(summary_table.columns),
                     fill_color='#1f77b4',
@@ -98,4 +73,4 @@ if bhavcopy_df is not None and not bhavcopy_df.empty:
     ])
     st.plotly_chart(fig, use_container_width=True)
 else:
-    st.warning("Please upload a valid NSE Bhavcopy file to proceed.")
+    st.warning("Please upload both FO and CM Bhavcopy files to proceed.")
