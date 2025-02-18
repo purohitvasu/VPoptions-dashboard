@@ -31,7 +31,7 @@ st.title("📊 Options & Futures Market Dashboard")
 if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
     # Ensure required columns exist
     required_columns_fo = {"XpryDt", "TckrSymb", "ClsPric", "OpnIntrst", "ChngInOpnIntrst", "OptnTp"}
-    required_columns_cm = {"SYMBOL", "DELIV_PER", "LAST_PRICE"}
+    required_columns_cm = {"SYMBOL", "DELIV_PER", "LAST_PRICE", "VWAP"}
     
     if not required_columns_fo.issubset(set(fo_bhavcopy_df.columns)):
         st.error("FO Bhavcopy file is missing required columns.")
@@ -47,6 +47,11 @@ if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
     fo_bhavcopy_df["ChngInOpnIntrst"] = pd.to_numeric(fo_bhavcopy_df["ChngInOpnIntrst"], errors='coerce')
     cm_bhavcopy_df["DELIV_PER"] = pd.to_numeric(cm_bhavcopy_df["DELIV_PER"], errors='coerce')
     cm_bhavcopy_df["LAST_PRICE"] = pd.to_numeric(cm_bhavcopy_df["LAST_PRICE"], errors='coerce')
+    cm_bhavcopy_df["VWAP"] = pd.to_numeric(cm_bhavcopy_df["VWAP"], errors='coerce')
+    
+    # Calculate 20 SMA for Price and Volume
+    cm_bhavcopy_df["20_SMA"] = cm_bhavcopy_df["LAST_PRICE"].rolling(window=20).mean()
+    cm_bhavcopy_df["20_SMA_Volume"] = cm_bhavcopy_df["VWAP"].rolling(window=20).mean()
     
     # Expiry Filter
     fo_bhavcopy_df["XpryDt"] = pd.to_datetime(fo_bhavcopy_df["XpryDt"], errors='coerce')
@@ -73,8 +78,8 @@ if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
         Total_Put_OI=("OpnIntrst", lambda x: x[fo_expiry_data["OptnTp"] == "PE"].sum() if "PE" in fo_expiry_data["OptnTp"].values else 0),
     ).reset_index()
     
-    # Merge with Delivery & LTP Data
-    summary_table = summary_table.merge(cm_bhavcopy_df[["Stock", "Delivery_Percentage", "LTP"]], left_on="TckrSymb", right_on="Stock", how="left").drop(columns=["Stock"])
+    # Merge with Delivery, LTP, SMA & VWAP Data
+    summary_table = summary_table.merge(cm_bhavcopy_df[["Stock", "Delivery_Percentage", "LTP", "20_SMA", "VWAP", "20_SMA_Volume"]], left_on="TckrSymb", right_on="Stock", how="left").drop(columns=["Stock"])
     
     # Calculate PCR with 2 decimal places, handle division by zero
     summary_table["PCR"] = summary_table.apply(lambda row: round(row["Total_Put_OI"] / row["Total_Call_OI"], 2) if row["Total_Call_OI"] > 0 else 0, axis=1)
@@ -86,15 +91,16 @@ if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
     summary_table = summary_table[(summary_table["Delivery_Percentage"] >= delivery_filter[0]) & (summary_table["Delivery_Percentage"] <= delivery_filter[1])]
     summary_table = summary_table[(summary_table["PCR"] >= pcr_filter[0]) & (summary_table["PCR"] <= pcr_filter[1])]
     
-    # Display Enhanced Table with Visualization
+    # Display Enhanced Table with Larger Font Sizes
     st.subheader(f"Stock Data for Expiry: {selected_expiry.date()}")
     fig = go.Figure(data=[go.Table(
         header=dict(values=list(summary_table.columns),
                     fill_color='#1f77b4',
-                    font=dict(color='white', size=14),
+                    font=dict(color='white', size=16),
                     align='center'),
         cells=dict(values=[summary_table[col].astype(str) for col in summary_table.columns],
                    fill_color=['#f5f5f5', '#ffffff'],
+                   font=dict(size=14),
                    align='center'))
     ])
     st.plotly_chart(fig, use_container_width=True)
