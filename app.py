@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
-import urllib.parse
+from fyers_api import fyersModel
 
 # Streamlit UI - Must be first command
 st.set_page_config(layout="wide", page_title="Options & Futures Dashboard")
@@ -13,45 +13,25 @@ secret_key = st.secrets["secret_key"]
 redirect_uri = st.secrets["redirect_uri"]
 access_token = None
 
-# Ensure client_id is URL encoded
-encoded_client_id = urllib.parse.quote(client_id, safe='')
-encoded_redirect_uri = urllib.parse.quote(redirect_uri, safe='')
-
-# Generate Correct Authentication Link
-def get_auth_code():
-    auth_url = f"https://api.fyers.in/api/v2/generate-authcode?client_id={encoded_client_id}&redirect_uri={encoded_redirect_uri}&response_type=code"
+# Function to authenticate using Fyers SDK
+def authenticate_fyers():
+    session = fyersModel.FyersModel(client_id=client_id, is_async=False)
+    auth_url = session.generate_authcode(redirect_uri=redirect_uri)
     st.sidebar.write(f"[Click here to Authenticate Fyers]({auth_url})")
-    return st.sidebar.text_input("Enter the Authorization Code after authentication:")
-
-# Function to get access token
-def get_access_token(auth_code):
-    if not auth_code:
-        return None
+    auth_code = st.sidebar.text_input("Enter the Authorization Code after authentication:")
     
-    token_url = "https://api.fyers.in/api/v2/token"
-    payload = {
-        "grant_type": "authorization_code",
-        "client_id": client_id,
-        "secret_key": secret_key,
-        "redirect_uri": redirect_uri,
-        "code": auth_code
-    }
-    response = requests.post(token_url, json=payload)
-    
-    if response.status_code == 200:
-        return response.json().get("access_token")
-    else:
-        st.sidebar.error("Failed to Authenticate. Please check your credentials and authorization code.")
-        return None
+    if auth_code:
+        session.set_access_token(auth_code)
+        access_token = session.get_access_token()
+        return access_token
+    return None
 
 # Automate Authentication
-auth_code = get_auth_code()
-if auth_code:
-    access_token = get_access_token(auth_code)
-    if access_token:
-        st.sidebar.success("Authentication Successful!")
-    else:
-        st.sidebar.error("Authentication failed. Ensure that the auth code is correct and try again.")
+access_token = authenticate_fyers()
+if access_token:
+    st.sidebar.success("Authentication Successful!")
+else:
+    st.sidebar.error("Authentication failed. Ensure that the auth code is correct and try again.")
 
 headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
 
