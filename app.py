@@ -31,7 +31,7 @@ st.title("📊 Options & Futures Market Dashboard")
 if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
     # Ensure required columns exist dynamically
     required_columns_fo = {"XpryDt", "TckrSymb", "ClsPric", "OpnIntrst", "ChngInOpnIntrst", "OptnTp"}
-    required_columns_cm = {"SYMBOL", "DELIV_PER", "LAST_PRICE", "VWAP"}
+    required_columns_cm = {"SYMBOL", "DELIV_PER", "LAST_PRICE"}
     
     missing_columns_fo = required_columns_fo - set(fo_bhavcopy_df.columns)
     missing_columns_cm = required_columns_cm - set(cm_bhavcopy_df.columns)
@@ -45,18 +45,16 @@ if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
         st.stop()
     
     # Convert necessary columns to correct data types
-    numeric_columns = ["ClsPric", "OpnIntrst", "ChngInOpnIntrst", "DELIV_PER", "LAST_PRICE", "VWAP"]
+    numeric_columns = ["ClsPric", "OpnIntrst", "ChngInOpnIntrst", "DELIV_PER", "LAST_PRICE"]
     for col in numeric_columns:
         if col in fo_bhavcopy_df.columns:
             fo_bhavcopy_df[col] = pd.to_numeric(fo_bhavcopy_df[col], errors='coerce')
         if col in cm_bhavcopy_df.columns:
             cm_bhavcopy_df[col] = pd.to_numeric(cm_bhavcopy_df[col], errors='coerce')
     
-    # Calculate 20 SMA for Price and Volume if VWAP and LAST_PRICE exist
+    # Calculate 20 SMA for Price if LAST_PRICE exists
     if "LAST_PRICE" in cm_bhavcopy_df.columns:
         cm_bhavcopy_df["20_SMA"] = cm_bhavcopy_df["LAST_PRICE"].rolling(window=20).mean()
-    if "VWAP" in cm_bhavcopy_df.columns:
-        cm_bhavcopy_df["20_SMA_Volume"] = cm_bhavcopy_df["VWAP"].rolling(window=20).mean()
     
     # Expiry Filter
     fo_bhavcopy_df["XpryDt"] = pd.to_datetime(fo_bhavcopy_df["XpryDt"], errors='coerce')
@@ -83,14 +81,10 @@ if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
         Total_Put_OI=("OpnIntrst", lambda x: x[fo_expiry_data["OptnTp"] == "PE"].sum() if "PE" in fo_expiry_data["OptnTp"].values else 0),
     ).reset_index()
     
-    # Merge with Delivery, LTP, SMA & VWAP Data
+    # Merge with Delivery, LTP, SMA Data
     merge_columns = ["Stock", "Delivery_Percentage", "LTP"]
     if "20_SMA" in cm_bhavcopy_df.columns:
         merge_columns.append("20_SMA")
-    if "VWAP" in cm_bhavcopy_df.columns:
-        merge_columns.append("VWAP")
-    if "20_SMA_Volume" in cm_bhavcopy_df.columns:
-        merge_columns.append("20_SMA_Volume")
     
     summary_table = summary_table.merge(cm_bhavcopy_df[merge_columns], left_on="TckrSymb", right_on="Stock", how="left").drop(columns=["Stock"])
     
