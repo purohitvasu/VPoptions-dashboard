@@ -12,22 +12,29 @@ bhavcopy_file = st.sidebar.file_uploader("Upload NSE Bhavcopy Data", type=["csv"
 @st.cache_data
 def load_data(bhavcopy_file):
     if bhavcopy_file is not None:
-        bhavcopy_df = pd.read_csv(bhavcopy_file)
-        
-        # Data Cleaning
-        bhavcopy_df = bhavcopy_df.rename(columns=str.strip)
-        
-        # Processing Bhavcopy Data
-        bhavcopy_df = bhavcopy_df[["TradDt", "TckrSymb", "XpryDt", "OpnPric", "HghPric", "LwPric", "ClsPric", "OpnIntrst", "ChngInOpnIntrst"]]
-        bhavcopy_df = bhavcopy_df.rename(columns={
-            "TradDt": "Date", "TckrSymb": "Stock", "XpryDt": "Expiry",
-            "OpnPric": "Open", "HghPric": "High", "LwPric": "Low", "ClsPric": "Close",
-            "OpnIntrst": "Total_OI", "ChngInOpnIntrst": "Change_in_OI"
-        })
-        bhavcopy_df["Date"] = pd.to_datetime(bhavcopy_df["Date"])
-        bhavcopy_df["Expiry"] = pd.to_datetime(bhavcopy_df["Expiry"])
-        
-        return bhavcopy_df
+        try:
+            bhavcopy_df = pd.read_csv(bhavcopy_file)
+            
+            # Data Cleaning
+            bhavcopy_df = bhavcopy_df.rename(columns=str.strip)
+            
+            # Processing Bhavcopy Data
+            required_columns = ["TradDt", "TckrSymb", "XpryDt", "OpnPric", "HghPric", "LwPric", "ClsPric", "OpnIntrst", "ChngInOpnIntrst"]
+            bhavcopy_df = bhavcopy_df[required_columns]
+            
+            bhavcopy_df = bhavcopy_df.rename(columns={
+                "TradDt": "Date", "TckrSymb": "Stock", "XpryDt": "Expiry",
+                "OpnPric": "Open", "HghPric": "High", "LwPric": "Low", "ClsPric": "Close",
+                "OpnIntrst": "Total_OI", "ChngInOpnIntrst": "Change_in_OI"
+            })
+            
+            bhavcopy_df["Date"] = pd.to_datetime(bhavcopy_df["Date"], errors='coerce')
+            bhavcopy_df["Expiry"] = pd.to_datetime(bhavcopy_df["Expiry"], errors='coerce')
+            
+            return bhavcopy_df.dropna()
+        except Exception as e:
+            st.error(f"Error processing file: {e}")
+            return None
     else:
         return None
 
@@ -35,10 +42,14 @@ bhavcopy_df = load_data(bhavcopy_file)
 
 st.title("📊 Options & Futures Market Dashboard")
 
-if bhavcopy_df is not None:
+if bhavcopy_df is not None and not bhavcopy_df.empty:
     # Stock Filter
-    stock_list = sorted(bhavcopy_df["Stock"].unique())
-    selected_stock = st.sidebar.selectbox("Select Stock", stock_list)
+    stock_list = sorted(bhavcopy_df["Stock"].dropna().unique())
+    if stock_list:
+        selected_stock = st.sidebar.selectbox("Select Stock", stock_list)
+    else:
+        st.warning("No valid stock data found in the uploaded file.")
+        st.stop()
     
     # Stock Details
     st.subheader("Stock Details: Open, High, Low, Close")
@@ -47,13 +58,19 @@ if bhavcopy_df is not None:
     
     # Futures Data - Expiry Wise
     st.subheader("Futures Open Interest - Expiry Wise")
-    futures_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock)].groupby("Expiry")["Total_OI", "Change_in_OI"].sum().reset_index()
-    st.dataframe(futures_data)
+    if "Total_OI" in bhavcopy_df.columns and "Change_in_OI" in bhavcopy_df.columns:
+        futures_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock)].groupby("Expiry")["Total_OI", "Change_in_OI"].sum().reset_index()
+        st.dataframe(futures_data)
+    else:
+        st.warning("Futures data columns missing.")
     
     # Options Data - Expiry Wise
     st.subheader("Options Open Interest - Expiry Wise")
-    options_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock)].groupby(["Expiry", "Stock"])["Total_OI", "Change_in_OI"].sum().reset_index()
-    st.dataframe(options_data)
+    if "Total_OI" in bhavcopy_df.columns and "Change_in_OI" in bhavcopy_df.columns:
+        options_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock)].groupby(["Expiry", "Stock"])["Total_OI", "Change_in_OI"].sum().reset_index()
+        st.dataframe(options_data)
+    else:
+        st.warning("Options data columns missing.")
     
     # Support & Resistance Based on OI
     st.subheader("Support & Resistance Levels")
@@ -68,4 +85,4 @@ if bhavcopy_df is not None:
     else:
         st.warning("Not enough OI data to determine Support & Resistance levels.")
 else:
-    st.warning("Please upload NSE Bhavcopy data to proceed.")
+    st.warning("Please upload a valid NSE Bhavcopy file to proceed.")
