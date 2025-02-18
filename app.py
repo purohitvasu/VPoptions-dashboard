@@ -14,12 +14,31 @@ fo_bhavcopy = st.sidebar.file_uploader("Upload FO Bhav Copy", type=["csv"])
 # Process the uploaded files
 def process_cm_bhavcopy(file):
     df = pd.read_csv(file)
-    required_columns = {"SYMBOL": "Ticker", "DELIV_PER": "Delivery_Percentage", "LAST_PRICE": "LTP"}
+    required_columns = {"SYMBOL": "Ticker"}
+    
+    # Check for missing columns
     missing_cols = [col for col in required_columns if col not in df.columns]
     if missing_cols:
         st.error(f"CM Bhavcopy file is missing columns: {', '.join(missing_cols)}")
         return None
-    df = df.rename(columns=required_columns)
+    
+    # Calculate Delivery Percentage if missing
+    if "DELIV_PER" not in df.columns:
+        if "DELIV_QTY" in df.columns and "TTL_TRD_QNTY" in df.columns:
+            df["DELIV_PER"] = (df["DELIV_QTY"].astype(float) / df["TTL_TRD_QNTY"].astype(float)) * 100
+        else:
+            st.error("CM Bhavcopy is missing required columns to calculate Delivery Percentage.")
+            return None
+    
+    # Use CLOSE_PRICE as LTP if LAST_PRICE is missing
+    if "LAST_PRICE" not in df.columns:
+        if "CLOSE_PRICE" in df.columns:
+            df["LAST_PRICE"] = df["CLOSE_PRICE"]
+        else:
+            st.error("CM Bhavcopy is missing LAST_PRICE and CLOSE_PRICE columns.")
+            return None
+    
+    df = df.rename(columns={"SYMBOL": "Ticker", "DELIV_PER": "Delivery_Percentage", "LAST_PRICE": "LTP"})
     df["Delivery_Percentage"] = pd.to_numeric(df["Delivery_Percentage"], errors='coerce').round(2)
     df["LTP"] = pd.to_numeric(df["LTP"], errors='coerce').round(2)
     return df[["Ticker", "LTP", "Delivery_Percentage"]]
