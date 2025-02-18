@@ -34,7 +34,7 @@ def process_cm_bhavcopy(file):
 
 def process_fo_bhavcopy(file):
     df = pd.read_csv(file)
-    required_columns = {"TckrSymb": "Ticker", "ChngInOpnIntrst": "Change_in_Future_OI", "OpnIntrst": "Future_OI", "XpryDt": "Expiry", "OptnTp": "Option_Type"}
+    required_columns = {"TckrSymb": "Ticker", "ChngInOpnIntrst": "Change_in_Future_OI", "OpnIntrst": "Future_OI", "XpryDt": "Expiry", "OptnTp": "Option_Type", "FinInstrmTp": "Instrument_Type"}
     
     # Rename available columns
     df = df.rename(columns={k: v for k, v in required_columns.items() if k in df.columns})
@@ -49,14 +49,17 @@ def process_fo_bhavcopy(file):
     if "Expiry" in df.columns:
         df["Expiry"] = pd.to_datetime(df["Expiry"], errors='coerce')
     
-    # Calculate total call OI and total put OI
-    if "Option_Type" in df.columns:
-        total_call_oi = df[df["Option_Type"] == "CE"].groupby("Ticker")["Future_OI"].sum().rename("Total_Call_OI")
-        total_put_oi = df[df["Option_Type"] == "PE"].groupby("Ticker")["Future_OI"].sum().rename("Total_Put_OI")
-        df = df.merge(total_call_oi, on="Ticker", how="left").merge(total_put_oi, on="Ticker", how="left")
-        df["PCR"] = (df["Total_Put_OI"] / df["Total_Call_OI"]).round(2)
+    # Filter options data based on Instrument Type
+    if "Instrument_Type" in df.columns:
+        df_options = df[df["Instrument_Type"] == "STO"]
+        
+        # Calculate total call OI and total put OI per expiry
+        total_call_oi = df_options[df_options["Option_Type"] == "CE"].groupby("Expiry")["Future_OI"].sum().rename("Total_Call_OI")
+        total_put_oi = df_options[df_options["Option_Type"] == "PE"].groupby("Expiry")["Future_OI"].sum().rename("Total_Put_OI")
+        df_options = df_options.merge(total_call_oi, on="Expiry", how="left").merge(total_put_oi, on="Expiry", how="left")
+        df_options["PCR"] = (df_options["Total_Put_OI"] / df_options["Total_Call_OI"]).round(2)
     
-    return df[[col for col in ["Ticker", "Expiry", "Change_in_Future_OI", "Future_OI", "Total_Call_OI", "Total_Put_OI", "PCR"] if col in df.columns]]
+    return df_options[[col for col in ["Ticker", "Expiry", "Change_in_Future_OI", "Future_OI", "Total_Call_OI", "Total_Put_OI", "PCR"] if col in df_options.columns]]
 
 if cm_bhavcopy and fo_bhavcopy:
     cm_data = process_cm_bhavcopy(cm_bhavcopy)
