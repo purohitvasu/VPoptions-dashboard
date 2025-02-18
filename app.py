@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 import requests
-import webbrowser
+import json
+import os
 
 # Streamlit UI - Must be first command
 st.set_page_config(layout="wide", page_title="Options & Futures Dashboard")
@@ -10,7 +11,21 @@ st.set_page_config(layout="wide", page_title="Options & Futures Dashboard")
 client_id = "your_client_id"
 secret_key = "your_secret_key"
 redirect_uri = "your_redirect_url"
+token_file = "fyers_token.json"
 access_token = None
+
+# Function to check and load stored token
+def load_access_token():
+    global access_token
+    if os.path.exists(token_file):
+        with open(token_file, "r") as f:
+            data = json.load(f)
+            access_token = data.get("access_token")
+
+# Function to save token
+def save_access_token(token):
+    with open(token_file, "w") as f:
+        json.dump({"access_token": token}, f)
 
 # Function to authenticate and get access token
 def authenticate_fyers():
@@ -22,20 +37,24 @@ def authenticate_fyers():
     if auth_code:
         token_url = "https://api.fyers.in/api/v2/token"
         payload = {
-            "client_id": client_id,
-            "secret_key": secret_key,
             "grant_type": "authorization_code",
-            "redirect_uri": redirect_uri,
-            "code": auth_code
+            "appIdHash": client_id,
+            "secretKey": secret_key,
+            "redirectUri": redirect_uri,
+            "authCode": auth_code
         }
         response = requests.post(token_url, json=payload)
         if response.status_code == 200:
             access_token = response.json().get("access_token")
+            save_access_token(access_token)
             st.sidebar.success("Authentication Successful!")
         else:
             st.sidebar.error("Failed to authenticate. Please check your credentials.")
 
-authenticate_fyers()
+# Load existing token
+load_access_token()
+if not access_token:
+    authenticate_fyers()
 
 headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
 
