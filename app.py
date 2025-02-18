@@ -31,7 +31,7 @@ st.title("📊 Options & Futures Market Dashboard")
 if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
     # Ensure required columns exist
     required_columns_fo = {"XpryDt", "TckrSymb", "ClsPric", "OpnIntrst", "ChngInOpnIntrst", "OptnTp"}
-    required_columns_cm = {"SYMBOL", "DELIV_PER"}
+    required_columns_cm = {"SYMBOL", "DELIV_PER", "LAST_PRICE"}
     
     if not required_columns_fo.issubset(set(fo_bhavcopy_df.columns)):
         st.error("FO Bhavcopy file is missing required columns.")
@@ -46,6 +46,7 @@ if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
     fo_bhavcopy_df["OpnIntrst"] = pd.to_numeric(fo_bhavcopy_df["OpnIntrst"], errors='coerce')
     fo_bhavcopy_df["ChngInOpnIntrst"] = pd.to_numeric(fo_bhavcopy_df["ChngInOpnIntrst"], errors='coerce')
     cm_bhavcopy_df["DELIV_PER"] = pd.to_numeric(cm_bhavcopy_df["DELIV_PER"], errors='coerce')
+    cm_bhavcopy_df["LAST_PRICE"] = pd.to_numeric(cm_bhavcopy_df["LAST_PRICE"], errors='coerce')
     
     # Expiry Filter
     fo_bhavcopy_df["XpryDt"] = pd.to_datetime(fo_bhavcopy_df["XpryDt"], errors='coerce')
@@ -60,28 +61,30 @@ if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
     fo_expiry_data = fo_bhavcopy_df[fo_bhavcopy_df["XpryDt"] == selected_expiry]
     
     # Merge FO and CM Data on Stock Name
-    cm_bhavcopy_df = cm_bhavcopy_df.rename(columns={"SYMBOL": "Stock", "DELIV_PER": "Delivery_Percentage"})
+    cm_bhavcopy_df = cm_bhavcopy_df.rename(columns={"SYMBOL": "Stock", "DELIV_PER": "Delivery_Percentage", "LAST_PRICE": "LTP"})
     
     # Ensure Option Type is handled correctly to avoid errors
     fo_expiry_data = fo_expiry_data.assign(OptnTp=fo_expiry_data["OptnTp"].fillna(""))
     
     summary_table = fo_expiry_data.groupby("TckrSymb").agg(
-        LTP=("ClsPric", "last"),
         Future_OI=("OpnIntrst", "sum"),
         Change_in_Future_OI=("ChngInOpnIntrst", "sum"),
         Total_Call_OI=("OpnIntrst", lambda x: x[fo_expiry_data["OptnTp"] == "CE"].sum() if "CE" in fo_expiry_data["OptnTp"].values else 0),
         Total_Put_OI=("OpnIntrst", lambda x: x[fo_expiry_data["OptnTp"] == "PE"].sum() if "PE" in fo_expiry_data["OptnTp"].values else 0),
     ).reset_index()
     
-    # Merge with Delivery Data
-    summary_table = summary_table.merge(cm_bhavcopy_df[["Stock", "Delivery_Percentage"]], left_on="TckrSymb", right_on="Stock", how="left").drop(columns=["Stock"])
+    # Merge with Delivery & LTP Data
+    summary_table = summary_table.merge(cm_bhavcopy_df[["Stock", "Delivery_Percentage", "LTP"]], left_on="TckrSymb", right_on="Stock", how="left").drop(columns=["Stock"])
     
     # Calculate PCR with 2 decimal places, handle division by zero
     summary_table["PCR"] = summary_table.apply(lambda row: round(row["Total_Put_OI"] / row["Total_Call_OI"], 2) if row["Total_Call_OI"] > 0 else 0, axis=1)
     
-    # Add Delivery Percentage Filter
+    # Add Delivery Percentage & PCR Filter
     delivery_filter = st.sidebar.slider("Select Delivery Percentage Range", 0, 100, (0, 100))
+    pcr_filter = st.sidebar.slider("Select PCR Range", 0.0, 5.0, (0.0, 5.0))
+    
     summary_table = summary_table[(summary_table["Delivery_Percentage"] >= delivery_filter[0]) & (summary_table["Delivery_Percentage"] <= delivery_filter[1])]
+    summary_table = summary_table[(summary_table["PCR"] >= pcr_filter[0]) & (summary_table["PCR"] <= pcr_filter[1])]
     
     # Display Enhanced Table with Visualization
     st.subheader(f"Stock Data for Expiry: {selected_expiry.date()}")
