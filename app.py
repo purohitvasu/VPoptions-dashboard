@@ -18,16 +18,17 @@ def load_data(bhavcopy_file):
             # Data Cleaning
             bhavcopy_df = bhavcopy_df.rename(columns=str.strip)
             
-            # Processing Bhavcopy Data
-            required_columns = ["TradDt", "TckrSymb", "XpryDt", "OpnPric", "HghPric", "LwPric", "ClsPric", "OpnIntrst", "ChngInOpnIntrst"]
-            bhavcopy_df = bhavcopy_df[required_columns]
+            # Ensure required columns exist
+            required_columns = {"TradDt": "Date", "TckrSymb": "Stock", "XpryDt": "Expiry",
+                                "OpnPric": "Open", "HghPric": "High", "LwPric": "Low", "ClsPric": "Close",
+                                "OpnIntrst": "Total_OI", "ChngInOpnIntrst": "Change_in_OI"}
             
-            bhavcopy_df = bhavcopy_df.rename(columns={
-                "TradDt": "Date", "TckrSymb": "Stock", "XpryDt": "Expiry",
-                "OpnPric": "Open", "HghPric": "High", "LwPric": "Low", "ClsPric": "Close",
-                "OpnIntrst": "Total_OI", "ChngInOpnIntrst": "Change_in_OI"
-            })
+            missing_columns = [col for col in required_columns.keys() if col not in bhavcopy_df.columns]
+            if missing_columns:
+                st.error(f"Missing required columns: {', '.join(missing_columns)}")
+                return None
             
+            bhavcopy_df = bhavcopy_df.rename(columns=required_columns)
             bhavcopy_df["Date"] = pd.to_datetime(bhavcopy_df["Date"], errors='coerce')
             bhavcopy_df["Expiry"] = pd.to_datetime(bhavcopy_df["Expiry"], errors='coerce')
             
@@ -59,7 +60,7 @@ if bhavcopy_df is not None and not bhavcopy_df.empty:
     # Futures Data - Expiry Wise
     st.subheader("Futures Open Interest - Expiry Wise")
     if "Total_OI" in bhavcopy_df.columns and "Change_in_OI" in bhavcopy_df.columns:
-        futures_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock)].groupby("Expiry")["Total_OI", "Change_in_OI"].sum().reset_index()
+        futures_data = bhavcopy_df[bhavcopy_df["Stock"] == selected_stock].groupby("Expiry")[["Total_OI", "Change_in_OI"]].sum().reset_index()
         st.dataframe(futures_data)
     else:
         st.warning("Futures data columns missing.")
@@ -67,7 +68,7 @@ if bhavcopy_df is not None and not bhavcopy_df.empty:
     # Options Data - Expiry Wise
     st.subheader("Options Open Interest - Expiry Wise")
     if "Total_OI" in bhavcopy_df.columns and "Change_in_OI" in bhavcopy_df.columns:
-        options_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock)].groupby(["Expiry", "Stock"])["Total_OI", "Change_in_OI"].sum().reset_index()
+        options_data = bhavcopy_df[bhavcopy_df["Stock"] == selected_stock].groupby(["Expiry", "Stock"])[["Total_OI", "Change_in_OI"]].sum().reset_index()
         st.dataframe(options_data)
     else:
         st.warning("Options data columns missing.")
