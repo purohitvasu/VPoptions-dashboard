@@ -32,7 +32,10 @@ def load_data(bhavcopy_file):
             bhavcopy_df["Date"] = pd.to_datetime(bhavcopy_df["Date"], errors='coerce')
             bhavcopy_df["Expiry"] = pd.to_datetime(bhavcopy_df["Expiry"], errors='coerce')
             
-            return bhavcopy_df.dropna()
+            # Filter valid data
+            bhavcopy_df = bhavcopy_df.dropna(subset=["Stock", "Expiry", "Total_OI", "Change_in_OI"])
+            
+            return bhavcopy_df
         except Exception as e:
             st.error(f"Error processing file: {e}")
             return None
@@ -59,12 +62,12 @@ if bhavcopy_df is not None and not bhavcopy_df.empty:
     
     # Futures Data - Expiry Wise
     st.subheader("Futures Open Interest - Expiry Wise")
-    futures_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (bhavcopy_df["Option_Type"].isna())].groupby("Expiry")[["Total_OI", "Change_in_OI"]].sum().reset_index()
+    futures_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (bhavcopy_df["Option_Type"].isna())].groupby("Expiry")["Total_OI", "Change_in_OI"].sum().reset_index()
     st.dataframe(futures_data)
     
     # Options Data - Expiry Wise
     st.subheader("Options Open Interest - Expiry Wise")
-    options_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (~bhavcopy_df["Option_Type"].isna())].groupby(["Expiry", "Strike_Price", "Option_Type"])[["Total_OI", "Change_in_OI"]].sum().reset_index()
+    options_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (~bhavcopy_df["Option_Type"].isna())].groupby(["Expiry", "Strike_Price", "Option_Type"])["Total_OI", "Change_in_OI"].sum().reset_index()
     st.dataframe(options_data)
     
     # Support & Resistance Based on OI
