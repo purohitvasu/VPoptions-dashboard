@@ -22,6 +22,10 @@ def load_data(fo_file, op_file):
         fo_df["STOCK"] = fo_df["CONTRACT_D"].str.extract(r'FUTSTK(\w+)')
         op_df["STOCK"] = op_df["CONTRACT_D"].str.extract(r'OPTSTK(\w+)')
         
+        # Ensure correct Open Interest Calculation
+        op_df["TOTAL_OI"] = op_df["OI_NO_CON"].sum()
+        op_df["CHANGE_IN_OI"] = op_df["NET_CHANGE"].sum()
+        
         return fo_df, op_df
     else:
         return None, None
@@ -46,8 +50,8 @@ if fo_df is not None and op_df is not None:
     st.subheader("Options Open Interest")
     filtered_op = op_df[op_df["STOCK"] == selected_stock]
     if not filtered_op.empty:
-        st.write(f"Total Open Interest: {filtered_op['OI_NO_CON'].sum()}")
-        st.write(f"Change in Open Interest: {filtered_op['OI_NO_CON'].diff().iloc[-1]}")
+        st.write(f"Total Open Interest: {filtered_op['TOTAL_OI'].iloc[0]}")
+        st.write(f"Change in Open Interest: {filtered_op['CHANGE_IN_OI'].iloc[0]}")
     else:
         st.warning("No options data available.")
 else:
