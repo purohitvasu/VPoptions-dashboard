@@ -55,30 +55,40 @@ if bhavcopy_df is not None and not bhavcopy_df.empty:
         st.warning("No valid stock data found in the uploaded file.")
         st.stop()
     
-    # Filter only the current expiry data
-    current_expiry = bhavcopy_df["Expiry"].min()
+    # Select the nearest future expiry
+    future_expiries = bhavcopy_df["Expiry"].unique()
+    future_expiries = sorted([exp for exp in future_expiries if exp >= pd.Timestamp.today()])
+    if future_expiries:
+        current_expiry = future_expiries[0]  # Nearest expiry
+    else:
+        st.error("No valid future expiry dates found.")
+        st.stop()
+    
     bhavcopy_df = bhavcopy_df[bhavcopy_df["Expiry"] == current_expiry]
     
     # Stock Details (Futures OHLC only)
-    st.subheader("Stock Details: Futures Open, High, Low, Close")
+    st.subheader(f"Stock Details: Futures Open, High, Low, Close (Expiry: {current_expiry.date()})")
     stock_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (bhavcopy_df["Option_Type"].isna())][["Date", "Open", "High", "Low", "Close"]]
-    st.dataframe(stock_data.style.format({"Open": "{:.2f}", "High": "{:.2f}", "Low": "{:.2f}", "Close": "{:.2f}"}).set_properties(**{"background-color": "#f9f9f9", "border": "1px solid black"}))
+    if stock_data.empty:
+        st.warning("No futures data available for this stock.")
+    else:
+        st.dataframe(stock_data.style.format({"Open": "{:.2f}", "High": "{:.2f}", "Low": "{:.2f}", "Close": "{:.2f}"}))
     
     # Futures Data - Expiry Wise
     st.subheader("Futures Open Interest - Current Expiry")
-    if "Total_OI" in bhavcopy_df.columns and "Change_in_OI" in bhavcopy_df.columns:
-        futures_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (bhavcopy_df["Option_Type"].isna())].groupby("Expiry")[["Total_OI", "Change_in_OI"]].sum().reset_index()
-        st.dataframe(futures_data.style.set_properties(**{"background-color": "#eef7ff", "border": "1px solid black"}))
+    futures_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (bhavcopy_df["Option_Type"].isna())].groupby("Expiry")[["Total_OI", "Change_in_OI"]].sum().reset_index()
+    if futures_data.empty:
+        st.warning("No futures open interest data available.")
     else:
-        st.warning("Futures data columns missing.")
+        st.dataframe(futures_data)
     
     # Options Data - Expiry Wise
     st.subheader("Options Open Interest - Current Expiry")
-    if "Total_OI" in bhavcopy_df.columns and "Change_in_OI" in bhavcopy_df.columns and "Strike_Price" in bhavcopy_df.columns:
-        options_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (~bhavcopy_df["Option_Type"].isna())].groupby(["Expiry", "Strike_Price", "Option_Type"])[["Total_OI", "Change_in_OI"]].sum().reset_index()
-        st.dataframe(options_data.style.set_properties(**{"background-color": "#fef5e7", "border": "1px solid black"}))
+    options_data = bhavcopy_df[(bhavcopy_df["Stock"] == selected_stock) & (~bhavcopy_df["Option_Type"].isna())].groupby(["Expiry", "Strike_Price", "Option_Type"])[["Total_OI", "Change_in_OI"]].sum().reset_index()
+    if options_data.empty:
+        st.warning("No options open interest data available.")
     else:
-        st.warning("Options data columns missing.")
+        st.dataframe(options_data)
     
     # Support & Resistance Based on OI
     st.subheader("Support & Resistance Levels")
