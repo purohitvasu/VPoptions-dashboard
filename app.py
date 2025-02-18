@@ -6,10 +6,10 @@ import os
 
 # Ensure fyers-api-v2 is installed
 try:
-    from fyers_api import fyersModel
+    from fyers_api import fyersModel, accessToken
 except ModuleNotFoundError:
     os.system("pip install fyers-apiv2")
-    from fyers_api import fyersModel
+    from fyers_api import fyersModel, accessToken
 
 # Streamlit UI - Must be first command
 st.set_page_config(layout="wide", page_title="Options & Futures Dashboard")
@@ -18,19 +18,25 @@ st.set_page_config(layout="wide", page_title="Options & Futures Dashboard")
 client_id = st.secrets["client_id"]
 secret_key = st.secrets["secret_key"]
 redirect_uri = st.secrets["redirect_uri"]
+response_type = "code"
+grant_type = "authorization_code"
 access_token = None
 
 # Function to authenticate using Fyers SDK
 def authenticate_fyers():
-    session = fyersModel.FyersModel(client_id=client_id, is_async=False)
-    auth_url = session.generate_authcode(redirect_uri=redirect_uri)
+    session = accessToken.SessionModel(client_id=client_id, secret_key=secret_key, redirect_uri=redirect_uri, response_type=response_type, grant_type=grant_type)
+    auth_url = session.generate_authcode()
     st.sidebar.write(f"[Click here to Authenticate Fyers]({auth_url})")
     auth_code = st.sidebar.text_input("Enter the Authorization Code after authentication:")
     
     if auth_code:
-        session.set_access_token(auth_code)
-        access_token = session.get_access_token()
-        return access_token
+        session.set_token(auth_code)
+        response = session.generate_token()
+        if "access_token" in response:
+            return response["access_token"]
+        else:
+            st.sidebar.error("Authentication failed. Please check your credentials and try again.")
+            return None
     return None
 
 # Automate Authentication
