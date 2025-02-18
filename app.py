@@ -15,7 +15,7 @@ cm_bhavcopy_file = st.sidebar.file_uploader("Upload NSE CM Bhavcopy Data", type=
 def load_data(file):
     if file is not None:
         try:
-            df = pd.read_csv(file)
+            df = pd.read_csv(file, dtype=str)  # Ensure all data is read as string to prevent parsing errors
             df = df.rename(columns=str.strip)
             return df
         except Exception as e:
@@ -41,10 +41,17 @@ if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
         st.error("CM Bhavcopy file is missing required columns.")
         st.stop()
     
+    # Convert necessary columns to correct data types
+    fo_bhavcopy_df["ClsPric"] = pd.to_numeric(fo_bhavcopy_df["ClsPric"], errors='coerce')
+    fo_bhavcopy_df["OpnIntrst"] = pd.to_numeric(fo_bhavcopy_df["OpnIntrst"], errors='coerce')
+    fo_bhavcopy_df["ChngInOpnIntrst"] = pd.to_numeric(fo_bhavcopy_df["ChngInOpnIntrst"], errors='coerce')
+    cm_bhavcopy_df["DELIV_PER"] = pd.to_numeric(cm_bhavcopy_df["DELIV_PER"], errors='coerce')
+    
     # Expiry Filter
+    fo_bhavcopy_df["XpryDt"] = pd.to_datetime(fo_bhavcopy_df["XpryDt"], errors='coerce')
     expiry_list = sorted(fo_bhavcopy_df["XpryDt"].dropna().unique())
     if expiry_list:
-        selected_expiry = st.sidebar.selectbox("Select Expiry", expiry_list, format_func=lambda x: pd.to_datetime(x).strftime('%Y-%m-%d'))
+        selected_expiry = st.sidebar.selectbox("Select Expiry", expiry_list, format_func=lambda x: x.strftime('%Y-%m-%d'))
     else:
         st.warning("No valid expiry dates found in the uploaded FO Bhavcopy file.")
         st.stop()
@@ -77,13 +84,13 @@ if fo_bhavcopy_df is not None and cm_bhavcopy_df is not None:
     summary_table = summary_table[(summary_table["Delivery_Percentage"] >= delivery_filter[0]) & (summary_table["Delivery_Percentage"] <= delivery_filter[1])]
     
     # Display Enhanced Table with Visualization
-    st.subheader(f"Stock Data for Expiry: {pd.to_datetime(selected_expiry).date()}")
+    st.subheader(f"Stock Data for Expiry: {selected_expiry.date()}")
     fig = go.Figure(data=[go.Table(
         header=dict(values=list(summary_table.columns),
                     fill_color='#1f77b4',
                     font=dict(color='white', size=14),
                     align='center'),
-        cells=dict(values=[summary_table[col] for col in summary_table.columns],
+        cells=dict(values=[summary_table[col].astype(str) for col in summary_table.columns],
                    fill_color=['#f5f5f5', '#ffffff'],
                    align='center'))
     ])
