@@ -1,13 +1,45 @@
 import streamlit as st
 import pandas as pd
 import requests
+import json
 
 # Streamlit UI - Must be first command
 st.set_page_config(layout="wide", page_title="Options & Futures Dashboard")
 
-# Fyers API Credentials (User should update this daily)
-st.sidebar.subheader("Fyers API Authentication")
-access_token = st.sidebar.text_input("Enter Your Fyers Access Token")
+# Fyers API Credentials
+client_id = "your_client_id"
+secret_key = "your_secret_key"
+redirect_uri = "your_redirect_url"
+access_token = None
+
+def get_auth_code():
+    auth_url = f"https://api.fyers.in/api/v2/generate-authcode?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code"
+    st.sidebar.write(f"[Click here to Authenticate Fyers]({auth_url})")
+    return st.sidebar.text_input("Enter the Authorization Code after authentication:")
+
+def get_access_token(auth_code):
+    token_url = "https://api.fyers.in/api/v2/token"
+    payload = {
+        "grant_type": "authorization_code",
+        "client_id": client_id,
+        "secret_key": secret_key,
+        "redirect_uri": redirect_uri,
+        "code": auth_code
+    }
+    response = requests.post(token_url, json=payload)
+    if response.status_code == 200:
+        return response.json().get("access_token")
+    return None
+
+# Automate Authentication
+auth_code = get_auth_code()
+if auth_code:
+    access_token = get_access_token(auth_code)
+    if access_token:
+        st.sidebar.success("Authentication Successful!")
+    else:
+        st.sidebar.error("Failed to Authenticate. Please check your credentials.")
+
 headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
 
 # Function to fetch real-time data from Fyers API
@@ -19,8 +51,7 @@ def fetch_fyers_data(symbol):
     if response.status_code == 200:
         data = response.json()
         return data["d"].get(symbol, {})
-    else:
-        return {}
+    return {}
 
 # Function to fetch real-time delivery data from Fyers API
 def fetch_delivery_data(symbol):
