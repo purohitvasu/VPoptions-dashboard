@@ -6,21 +6,21 @@ import plotly.graph_objects as go
 # Streamlit UI - Must be first command
 st.set_page_config(layout="wide", page_title="Options & Futures Dashboard")
 
-# Load Data
-fo_file_path = "fo170225.csv"
-op_file_path = "op170225.csv"
+# File Upload Section
+st.sidebar.subheader("Upload CSV Files")
+fo_file = st.sidebar.file_uploader("Upload Futures Data (fo170225.csv)", type=["csv"])
+op_file = st.sidebar.file_uploader("Upload Options Data (op170225.csv)", type=["csv"])
 
 @st.cache_data
-def load_data():
-    try:
-        fo_df = pd.read_csv(fo_file_path)
-        op_df = pd.read_csv(op_file_path)
+def load_data(fo_file, op_file):
+    if fo_file is not None and op_file is not None:
+        fo_df = pd.read_csv(fo_file)
+        op_df = pd.read_csv(op_file)
         return fo_df, op_df
-    except FileNotFoundError:
-        st.error("Error: One or more data files not found.")
+    else:
         return None, None
 
-fo_df, op_df = load_data()
+fo_df, op_df = load_data(fo_file, op_file)
 
 st.title("📊 Options & Futures Market Dashboard")
 
@@ -64,4 +64,5 @@ if fo_df is not None and op_df is not None:
         st.write(summary_metrics)
     else:
         st.warning("No market insights available due to lack of data.")
-
+else:
+    st.warning("Please upload both Futures and Options CSV files to proceed.")
