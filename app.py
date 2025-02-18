@@ -22,10 +22,14 @@ def process_cm_bhavcopy(file):
         st.error(f"CM Bhavcopy file is missing columns: {', '.join(missing_cols)}")
         return None
     
+    # Automatically detect delivery and total traded quantity column names
+    delivery_qty_col = "DELIV_QTY" if "DELIV_QTY" in df.columns else "DELIVERABLE_QTY" if "DELIVERABLE_QTY" in df.columns else None
+    total_qty_col = "TTL_TRD_QNTY" if "TTL_TRD_QNTY" in df.columns else "TOTAL_TRD_QTY" if "TOTAL_TRD_QTY" in df.columns else None
+    
     # Calculate Delivery Percentage if missing
     if "DELIV_PER" not in df.columns:
-        if "DELIV_QTY" in df.columns and "TTL_TRD_QNTY" in df.columns:
-            df["DELIV_PER"] = (df["DELIV_QTY"].astype(float) / df["TTL_TRD_QNTY"].astype(float)) * 100
+        if delivery_qty_col and total_qty_col:
+            df["DELIV_PER"] = (df[delivery_qty_col].astype(float) / df[total_qty_col].astype(float)) * 100
         else:
             st.error("CM Bhavcopy is missing required columns to calculate Delivery Percentage.")
             return None
