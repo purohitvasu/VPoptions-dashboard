@@ -22,7 +22,7 @@ def load_data(bhavcopy_file):
             # Ensure required columns exist
             required_columns = {"TradDt": "Date", "TckrSymb": "Stock", "XpryDt": "Expiry",
                                 "OpnPric": "Open", "HghPric": "High", "LwPric": "Low", "ClsPric": "Close",
-                                "OpnIntrst": "Total_OI", "ChngInOpnIntrst": "Change_in_OI", "OptnTp": "Option_Type", "StrkPric": "Strike_Price"}
+                                "OpnIntrst": "Total_OI", "ChngInOpnIntrst": "Change_in_OI", "OptnTp": "Option_Type", "StrkPric": "Strike_Price", "FinInstrmTp": "Instrument_Type"}
             
             missing_columns = [col for col in required_columns.keys() if col not in bhavcopy_df.columns]
             if missing_columns:
@@ -61,7 +61,7 @@ if bhavcopy_df is not None and not bhavcopy_df.empty:
     
     # Aggregate Data for Table
     summary_table = expiry_data.groupby("Stock").agg(
-        LTP=("Close", "last"),
+        LTP=("Close", lambda x: x[expiry_data["Instrument_Type"] == "STF"].iloc[-1] if not x[expiry_data["Instrument_Type"] == "STF"].empty else x.iloc[-1]),
         Future_OI=("Total_OI", "sum"),
         Change_in_Future_OI=("Change_in_OI", "sum"),
         Total_Call_OI=("Total_OI", lambda x: x[expiry_data["Option_Type"] == "CE"].sum()),
