@@ -7,10 +7,10 @@ import urllib.parse
 # Streamlit UI - Must be first command
 st.set_page_config(layout="wide", page_title="Options & Futures Dashboard")
 
-# Fyers API Credentials
-client_id = "your_client_id"
-secret_key = "your_secret_key"
-redirect_uri = "your_redirect_url"
+# Load credentials from Streamlit Secrets
+client_id = st.secrets["client_id"]
+secret_key = st.secrets["secret_key"]
+redirect_uri = st.secrets["redirect_uri"]
 access_token = None
 
 # Ensure client_id is URL encoded
