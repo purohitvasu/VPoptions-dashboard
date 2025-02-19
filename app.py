@@ -1,64 +1,76 @@
 import streamlit as st
-import websocket
-import json
-import threading
+import pandas as pd
+import requests
+import os
+from dotenv import load_dotenv
 
-st.title("📈 Live Stock Dashboard - Dhan API")
-st.subheader("Real-time Market Data")
+# Load API credentials
+load_dotenv()
+DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
 
-# Initialize session state to store live data
-if "live_data" not in st.session_state:
-    st.session_state["live_data"] = "Waiting for data..."
+# Streamlit UI - Must be first command
+st.set_page_config(layout="wide", page_title="Options & Futures Dashboard")
 
-# UI placeholder for live data updates
-live_data_box = st.empty()
+st.title("📊 Options & Futures Market Dashboard")
 
-# Load API Token
-try:
-    access_token = st.secrets["secrets"]["DHAN_ACCESS_TOKEN"]
-    st.success("✅ Access Token Loaded Successfully")
-except Exception as e:
-    st.error("❌ Error Loading Access Token")
-    st.write(e)
+# Dhan API Base URL
+DHAN_BASE_URL = "https://api.dhan.co"
 
-# Define WebSocket URL
-ws_url = f"wss://api-feed.dhan.co?version=2&token={access_token}&authType=2"
+# Function to fetch market data
+def fetch_market_data(symbol):
+    url = f"{DHAN_BASE_URL}/market/v1/quote/{symbol}"
+    headers = {"Authorization": f"Bearer {DHAN_ACCESS_TOKEN}"}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        st.error(f"Error fetching market data for {symbol}: {response.status_code}")
+        return None
 
-# WebSocket event handlers
-def on_message(ws, message):
-    data = json.loads(message)
-    st.session_state["live_data"] = data  # Store live data in session state
+# Function to fetch option chain data
+def fetch_option_chain(symbol):
+    url = f"{DHAN_BASE_URL}/market/v1/option-chain/{symbol}"
+    headers = {"Authorization": f"Bearer {DHAN_ACCESS_TOKEN}"}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        st.error(f"Error fetching option chain for {symbol}: {response.status_code}")
+        return None
 
-def on_error(ws, error):
-    st.session_state["live_data"] = f"❌ WebSocket Error: {error}"
+# User input for stock symbol
+symbol = st.sidebar.text_input("Enter Stock Symbol (e.g., NIFTY)", value="NIFTY")
 
-def on_close(ws, close_status_code, close_msg):
-    st.session_state["live_data"] = f"⚠️ WebSocket Closed: {close_msg}"
-
-def on_open(ws):
-    st.session_state["live_data"] = "✅ WebSocket Connection Established"
+if symbol:
+    # Fetch Market Data
+    market_data = fetch_market_data(symbol)
+    if market_data:
+        st.subheader(f"Market Data for {symbol}")
+        st.write(market_data)
     
-    subscribe_message = {
-        "RequestCode": 15,
-        "InstrumentCount": 1,
-        "InstrumentList": [
-            {
-                "ExchangeSegment": "NSE_EQ",
-                "SecurityId": "1333"  # Change this to your stock
-            }
-        ]
-    }
-    ws.send(json.dumps(subscribe_message))
+    # Fetch Option Chain Data
+    option_chain = fetch_option_chain(symbol)
+    if option_chain:
+        st.subheader(f"Option Chain for {symbol}")
+        df_option_chain = pd.DataFrame(option_chain["data"])
+        
+        # Filter expiry dates
+        expiry_dates = df_option_chain["expiryDate"].unique()
+        selected_expiry = st.sidebar.selectbox("Select Expiry", expiry_dates)
+        df_filtered = df_option_chain[df_option_chain["expiryDate"] == selected_expiry]
+        
+        # Calculate Total Call OI & Put OI
+        total_call_oi = df_filtered[df_filtered["optionType"] == "CE"]["openInterest"].sum()
+        total_put_oi = df_filtered[df_filtered["optionType"] == "PE"]["openInterest"].sum()
+        
+        # Calculate PCR
+        pcr = round(total_put_oi / total_call_oi, 2) if total_call_oi > 0 else 0
+        
+        # Display Calculated Data
+        st.metric(label="Total Call OI", value=total_call_oi)
+        st.metric(label="Total Put OI", value=total_put_oi)
+        st.metric(label="PCR (Put/Call Ratio)", value=pcr)
+        
+        # Display Option Chain Data
+        st.dataframe(df_filtered.style.set_properties(**{"font-size": "16px"}))
 
-# Function to start WebSocket in a thread
-def start_websocket():
-    ws_app = websocket.WebSocketApp(ws_url, on_open=on_open, on_message=on_message, on_error=on_error, on_close=on_close)
-    ws_app.run_forever()
-
-# Start WebSocket in a separate thread
-ws_thread = threading.Thread(target=start_websocket, daemon=True)
-ws_thread.start()
-
-# Continuously update live data on UI
-while True:
-    live_data_box.write(st.session_state["live_data"])
