@@ -29,7 +29,7 @@ def fetch_market_data(symbol):
 # Function to fetch option chain data
 def fetch_option_chain(symbol):
     formatted_symbol = f"NSE:{symbol}"  # Ensuring correct format for Dhan API
-    url = f"{DHAN_BASE_URL}/market/v1/option-chain/{formatted_symbol}"
+    url = f"{DHAN_BASE_URL}/market/v1/instruments/option-chain/{formatted_symbol}"
     headers = {"Authorization": f"Bearer {DHAN_ACCESS_TOKEN}"}
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
@@ -39,7 +39,7 @@ def fetch_option_chain(symbol):
         return None
 
 # User input for stock symbol
-symbol = st.sidebar.text_input("Enter Stock Symbol (e.g., NIFTY)", value="NIFTY")
+symbol = st.sidebar.text_input("Enter Stock Symbol (e.g., NIFTY_50)", value="NIFTY_50")
 
 if symbol:
     # Fetch Market Data
