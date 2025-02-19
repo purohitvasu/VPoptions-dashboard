@@ -6,6 +6,9 @@ import threading
 st.title("📈 Live Stock Dashboard - Dhan API")
 st.subheader("Real-time Market Data")
 
+# UI placeholder for live data updates
+live_data_box = st.empty()
+
 # Load API Token
 try:
     access_token = st.secrets["secrets"]["DHAN_ACCESS_TOKEN"]
@@ -17,33 +20,33 @@ except Exception as e:
 # Define WebSocket URL
 ws_url = f"wss://api-feed.dhan.co?version=2&token={access_token}&authType=2"
 
-# WebSocket status display
-status_box = st.empty()
-
-# WebSocket message handler
+# WebSocket event handlers
 def on_message(ws, message):
     data = json.loads(message)
-    st.write("📊 Live Data Received:", data)  # Display data in Streamlit
+
+    # Update UI inside Streamlit session
+    with st.session_state_lock:
+        live_data_box.write(f"📊 **Live Data:** {data}")
 
 def on_error(ws, error):
-    status_box.error(f"❌ WebSocket Error: {error}")
-    st.write("⚠️ Debug Info: Error with WebSocket connection")
+    with st.session_state_lock:
+        live_data_box.error(f"❌ WebSocket Error: {error}")
 
 def on_close(ws, close_status_code, close_msg):
-    status_box.warning(f"⚠️ WebSocket Closed: {close_msg}")
-    st.write("⚠️ Debug Info: WebSocket closed unexpectedly")
+    with st.session_state_lock:
+        live_data_box.warning(f"⚠️ WebSocket Closed: {close_msg}")
 
 def on_open(ws):
-    status_box.success("✅ WebSocket Connection Established")
-    st.write("🚀 Debug Info: WebSocket successfully connected")
-
+    with st.session_state_lock:
+        live_data_box.success("✅ WebSocket Connection Established")
+    
     subscribe_message = {
         "RequestCode": 15,
         "InstrumentCount": 1,
         "InstrumentList": [
             {
                 "ExchangeSegment": "NSE_EQ",
-                "SecurityId": "1333"  # Modify with your stock
+                "SecurityId": "1333"  # Change this to your stock
             }
         ]
     }
