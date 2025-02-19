@@ -2,10 +2,8 @@ import streamlit as st
 import pandas as pd
 import requests
 import os
-from dotenv import load_dotenv
 
 # Load API credentials
-load_dotenv()
 DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
 
 # Streamlit UI - Must be first command
