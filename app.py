@@ -1,12 +1,16 @@
 import streamlit as st
-import os
-from dhanhq import DhanHQ
 
-# Fetch API credentials from Streamlit secrets
-ACCESS_TOKEN = st.secrets["DHAN_ACCESS_TOKEN"]
+try:
+    from dhanhq import DhanHQ
+    st.write("DhanHQ Import Successful ✅")
+except ImportError:
+    st.write("❌ DhanHQ Import Failed. Trying manual install...")
 
-# Initialize Dhan API client
-dhan = DhanHQ(ACCESS_TOKEN)
+    import os
+    os.system("pip install dhanhq")
 
-# Test API Connection
-st.write("Dhan API Connected ✅")
+    try:
+        from dhanhq import DhanHQ
+        st.write("DhanHQ Import Successful After Manual Install ✅")
+    except ImportError:
+        st.write("❌ DhanHQ Still Not Working. Check Logs.")
