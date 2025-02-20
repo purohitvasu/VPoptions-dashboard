@@ -64,9 +64,6 @@ def process_files(cash_file, fo_file):
         fo_df = pd.read_csv(fo_file)
         fo_df = clean_columns(fo_df, fo_column_mapping)
 
-        # Debugging: Print actual column names
-        st.write("✅ **Columns in uploaded F&O CSV:**", list(fo_df.columns))
-
         # Filter only Stock Futures (STF) and Index Futures (IDF)
         fo_df = fo_df[fo_df["Instrument Type"].isin(["STF", "IDF"])]
 
@@ -90,7 +87,7 @@ def process_files(cash_file, fo_file):
 
         # Merge F&O Data
         fo_final = fo_df.merge(call_oi, on="Script Name", how="left").merge(put_oi, on="Script Name", how="left")
-        fo_final["PCR"] = (fo_final["Total Put OI"] / fo_final["Total Call OI"]).round(2)
+        fo_final["PCR"] = (fo_final["Total Put OI"] / fo_final["Total Call OI"]).fillna(0).round(2)  # Handle NaN
 
         # Merge with Cash Market Data (only matching stocks & indices)
         final_df = cash_df.merge(fo_final, on="Script Name", how="inner")
@@ -119,14 +116,24 @@ if cash_file and fo_file:
         if selected_expiry != "All":
             df = df[df["Expiry Date"] == selected_expiry]
 
-        # PCR Filter
-        min_pcr, max_pcr = float(df["PCR"].min()), float(df["PCR"].max())
-        pcr_range = st.sidebar.slider("📈 Select PCR Range", min_value=min_pcr, max_value=max_pcr, value=(min_pcr, max_pcr))
+        # PCR Filter (Handling NaN & sorting issue)
+        if df["PCR"].notna().sum() > 0:  # Ensure PCR has valid values
+            min_pcr = df["PCR"].min()
+            max_pcr = df["PCR"].max()
+        else:
+            min_pcr, max_pcr = 0, 1  # Default safe values
+        
+        pcr_range = st.sidebar.slider("📈 Select PCR Range", min_value=float(min_pcr), max_value=float(max_pcr), value=(float(min_pcr), float(max_pcr)))
         df = df[(df["PCR"] >= pcr_range[0]) & (df["PCR"] <= pcr_range[1])]
 
-        # Delivery Percentage Filter
-        min_delivery, max_delivery = float(df["Delivery %"].min()), float(df["Delivery %"].max())
-        delivery_range = st.sidebar.slider("📊 Select Delivery % Range", min_value=min_delivery, max_value=max_delivery, value=(min_delivery, max_delivery))
+        # Delivery Percentage Filter (Handling NaN & sorting issue)
+        if df["Delivery %"].notna().sum() > 0:  # Ensure Delivery % has valid values
+            min_delivery = df["Delivery %"].min()
+            max_delivery = df["Delivery %"].max()
+        else:
+            min_delivery, max_delivery = 0, 100  # Default safe values
+        
+        delivery_range = st.sidebar.slider("📊 Select Delivery % Range", min_value=float(min_delivery), max_value=float(max_delivery), value=(float(min_delivery), float(max_delivery)))
         df = df[(df["Delivery %"] >= delivery_range[0]) & (df["Delivery %"] <= delivery_range[1])]
 
         # Display merged data
