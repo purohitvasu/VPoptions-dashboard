@@ -137,13 +137,16 @@ if fo_file:
 if cash_df is not None:
     st.success("✅ Cash Market file processed successfully!")
 
+    # Sidebar Filter for Delivery Percentage
+    min_delivery, max_delivery = cash_df["Delivery %"].min(), cash_df["Delivery %"].max()
+    if min_delivery == max_delivery:
+        min_delivery, max_delivery = 0, 100  # Default range
+    delivery_range = st.sidebar.slider("📊 Select Delivery % Range", min_value=float(min_delivery), max_value=float(max_delivery), value=(float(min_delivery), float(max_delivery)))
+    cash_df = cash_df[(cash_df["Delivery %"] >= delivery_range[0]) & (cash_df["Delivery %"] <= delivery_range[1])]
+
     # Display Cash Market Data
     st.subheader("📊 Cash Market Data")
     st.dataframe(cash_df)
-
-    # Allow user to download the processed dataset
-    csv_cash = cash_df.to_csv(index=False).encode("utf-8")
-    st.download_button("📥 Download Cash Market Data", csv_cash, "cash_market_data.csv", "text/csv")
 
 if fo_df is not None:
     st.success("✅ F&O Bhavcopy file processed successfully!")
@@ -157,19 +160,9 @@ if fo_df is not None:
     if selected_expiry != "All":
         fo_df = fo_df[fo_df["Expiry Date"] == selected_expiry]
 
-    # PCR Filter
-    min_pcr, max_pcr = fo_df["PCR"].min(), fo_df["PCR"].max()
-    if min_pcr == max_pcr:
-        min_pcr, max_pcr = 0, 1  # Default range
-    pcr_range = st.sidebar.slider("📈 Select PCR Range", min_value=float(min_pcr), max_value=float(max_pcr), value=(float(min_pcr), float(max_pcr)))
-    fo_df = fo_df[(fo_df["PCR"] >= pcr_range[0]) & (fo_df["PCR"] <= pcr_range[1])]
-
     # Display F&O Data
     st.subheader("📊 F&O Stock Analysis")
     st.dataframe(fo_df)
 
-    # Allow user to download the processed dataset
-    csv_fo = fo_df.to_csv(index=False).encode("utf-8")
-    st.download_button("📥 Download F&O Bhavcopy Data", csv_fo, "fo_bhavcopy_data.csv", "text/csv")
 else:
     st.warning("⚠️ Please upload both Cash Market & F&O Bhavcopy files.")
