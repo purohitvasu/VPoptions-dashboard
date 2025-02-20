@@ -84,7 +84,7 @@ def get_stock_data(symbol):
     }
 
 # Streamlit UI
-st.title("📊 NIFTY 50 Live Stock Dashboard with Indicators")
+st.title("📊 NIFTY 50 Live Stock Dashboard")
 
 # Fetch all stock data
 st.write("Fetching live stock data, please wait...")
