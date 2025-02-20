@@ -78,7 +78,7 @@ def process_files(cash_file, fo_file):
         # Clean numeric values
         fo_df = clean_numeric_data(fo_df, ["Future OI", "Future OI Change"])
 
-        # Aggregate OI for Calls & Puts
+        # Calculate Total Call OI and Total Put OI for each instrument
         call_oi = fo_df[fo_df["Option Type"] == "CE"].groupby("Script Name")["Future OI"].sum().reset_index()
         put_oi = fo_df[fo_df["Option Type"] == "PE"].groupby("Script Name")["Future OI"].sum().reset_index()
 
@@ -92,18 +92,18 @@ def process_files(cash_file, fo_file):
         # Merge with Cash Market Data (only matching stocks & indices)
         final_df = cash_df.merge(fo_final, on="Script Name", how="inner")
 
-        # Select only the required columns
-        final_df = final_df[["Script Name", "LTP", "Delivery %", "Future OI", "Future OI Change", "Total Call OI", "Total Put OI", "PCR", "Expiry Date"]]
+        # Select only the required columns (Removing Expiry Date from display)
+        final_df = final_df[["Script Name", "LTP", "Delivery %", "Future OI", "Future OI Change", "Total Call OI", "Total Put OI", "PCR"]]
 
-        return final_df
+        return final_df, fo_df["Expiry Date"].dropna().unique()  # Return dataset + expiry dates for filtering
 
     except Exception as e:
         st.error(f"❌ Error processing files: {str(e)}")
-        return None
+        return None, None
 
 # Process files after upload
 if cash_file and fo_file:
-    df = process_files(cash_file, fo_file)
+    df, expiry_dates = process_files(cash_file, fo_file)
     if df is not None:
         st.success("✅ Files uploaded & processed successfully!")
         
@@ -111,7 +111,6 @@ if cash_file and fo_file:
         st.sidebar.header("🔍 Filters")
         
         # Expiry Date Filter
-        expiry_dates = df["Expiry Date"].dropna().unique()
         selected_expiry = st.sidebar.selectbox("📅 Select Expiry Date", ["All"] + list(expiry_dates))
         if selected_expiry != "All":
             df = df[df["Expiry Date"] == selected_expiry]
