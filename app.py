@@ -55,7 +55,7 @@ def process_files(cash_file, fo_file):
         if not all(col in cash_df.columns for col in required_cash_cols):
             st.error(f"⚠️ Cash Market CSV is missing columns: {set(required_cash_cols) - set(cash_df.columns)}")
             st.write("🔍 **Columns found in uploaded file:**", list(cash_df.columns))
-            return None
+            return None, None
 
         # Clean numeric values
         cash_df = clean_numeric_data(cash_df, ["LTP", "Delivery %"])
@@ -73,7 +73,13 @@ def process_files(cash_file, fo_file):
 
         if missing_cols:
             st.error(f"⚠️ **F&O CSV is missing columns:** {missing_cols}")
-            return None
+            return None, None
+
+        # Ensure 'Expiry Date' is of string type
+        fo_df["Expiry Date"] = fo_df["Expiry Date"].astype(str)
+
+        # Extract unique expiry dates before processing
+        expiry_dates = fo_df["Expiry Date"].dropna().unique()
 
         # Clean numeric values
         fo_df = clean_numeric_data(fo_df, ["Future OI", "Future OI Change"])
@@ -92,10 +98,10 @@ def process_files(cash_file, fo_file):
         # Merge with Cash Market Data (only matching stocks & indices)
         final_df = cash_df.merge(fo_final, on="Script Name", how="inner")
 
-        # Select only the required columns (Removing Expiry Date from display)
-        final_df = final_df[["Script Name", "LTP", "Delivery %", "Future OI", "Future OI Change", "Total Call OI", "Total Put OI", "PCR"]]
+        # Drop Expiry Date from display, keep for filtering
+        final_df.drop(columns=["Expiry Date"], inplace=True, errors="ignore")
 
-        return final_df, fo_df["Expiry Date"].dropna().unique()  # Return dataset + expiry dates for filtering
+        return final_df, expiry_dates  # Return dataset + expiry dates for filtering
 
     except Exception as e:
         st.error(f"❌ Error processing files: {str(e)}")
@@ -111,9 +117,10 @@ if cash_file and fo_file:
         st.sidebar.header("🔍 Filters")
         
         # Expiry Date Filter
-        selected_expiry = st.sidebar.selectbox("📅 Select Expiry Date", ["All"] + list(expiry_dates))
-        if selected_expiry != "All":
-            df = df[df["Expiry Date"] == selected_expiry]
+        if expiry_dates is not None and len(expiry_dates) > 0:
+            selected_expiry = st.sidebar.selectbox("📅 Select Expiry Date", ["All"] + list(expiry_dates))
+            if selected_expiry != "All":
+                df = df[df["Script Name"].isin(fo_file[fo_file["Expiry Date"] == selected_expiry]["Script Name"])]
 
         # PCR Filter (Handling NaN & sorting issue)
         min_pcr, max_pcr = df["PCR"].min(), df["PCR"].max()
