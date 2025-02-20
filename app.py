@@ -81,7 +81,7 @@ def process_files(cash_file, fo_file):
         # Clean numeric values
         fo_df = clean_numeric_data(fo_df, ["Future OI", "Future OI Change"])
 
-        # Calculate Total Call OI and Total Put OI for each instrument
+        # Calculate Total Call OI (sum of CE) and Total Put OI (sum of PE)
         call_oi = fo_df[fo_df["Option Type"] == "CE"].groupby(["Script Name", "Expiry Date"])["Future OI"].sum().reset_index()
         put_oi = fo_df[fo_df["Option Type"] == "PE"].groupby(["Script Name", "Expiry Date"])["Future OI"].sum().reset_index()
 
@@ -90,7 +90,17 @@ def process_files(cash_file, fo_file):
 
         # Merge F&O Data
         fo_final = fo_df.merge(call_oi, on=["Script Name", "Expiry Date"], how="left").merge(put_oi, on=["Script Name", "Expiry Date"], how="left")
-        fo_final["PCR"] = (fo_final["Total Put OI"] / fo_final["Total Call OI"]).fillna(0).round(2)  # Handle NaN
+
+        # Ensure all OI values are numeric and fill NaN with 0
+        fo_final["Total Call OI"] = fo_final["Total Call OI"].fillna(0).round(2)
+        fo_final["Total Put OI"] = fo_final["Total Put OI"].fillna(0).round(2)
+
+        # Calculate PCR (Put-Call Ratio) and handle division errors
+        fo_final["PCR"] = np.where(
+            fo_final["Total Call OI"] > 0, 
+            (fo_final["Total Put OI"] / fo_final["Total Call OI"]).round(2), 
+            0
+        )
 
         # Merge with Cash Market Data (only matching stocks & indices)
         final_df = cash_df.merge(fo_final, on="Script Name", how="inner")
@@ -119,24 +129,18 @@ if cash_file and fo_file:
         if selected_expiry != "All":
             df = df[df["Expiry Date"] == selected_expiry]
 
-        # PCR Filter (Handling NaN & sorting issue)
+        # PCR Filter
         min_pcr, max_pcr = df["PCR"].min(), df["PCR"].max()
-        if min_pcr == max_pcr:  # Avoid slider error
-            min_pcr, max_pcr = 0, 1
-
         pcr_range = st.sidebar.slider("📈 Select PCR Range", min_value=float(min_pcr), max_value=float(max_pcr), value=(float(min_pcr), float(max_pcr)))
         df = df[(df["PCR"] >= pcr_range[0]) & (df["PCR"] <= pcr_range[1])]
 
-        # Delivery Percentage Filter (Handling NaN & sorting issue)
+        # Delivery Percentage Filter
         min_delivery, max_delivery = df["Delivery %"].min(), df["Delivery %"].max()
-        if min_delivery == max_delivery:  # Avoid slider error
-            min_delivery, max_delivery = 0, 100
-        
         delivery_range = st.sidebar.slider("📊 Select Delivery % Range", min_value=float(min_delivery), max_value=float(max_delivery), value=(float(min_delivery), float(max_delivery)))
         df = df[(df["Delivery %"] >= delivery_range[0]) & (df["Delivery %"] <= delivery_range[1])]
 
         # Display merged data
-        st.subheader("📊 Processed Data (Filtered)")
+        st.subheader("📊 F&O Stock Analysis")
         st.dataframe(df)
 
         # Allow user to download the processed dataset
