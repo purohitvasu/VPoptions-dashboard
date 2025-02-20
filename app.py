@@ -23,8 +23,8 @@ cash_column_mapping = {
 # Column Mapping for F&O Bhavcopy CSV
 fo_column_mapping = {
     "TckrSymb": "Script Name",
-    "OpnIntrst": "Open Interest",
-    "ChngInOpnIntrst": "Future OI Change",
+    "OpnIntrst": "Future OI",
+    "ChngInOpnIntrst": "Change in Future OI",
     "OptnTp": "Option Type",
     "XpryDt": "Expiry Date",
     "FinInstrmTp": "Instrument Type"
@@ -82,11 +82,11 @@ def process_fo_bhavcopy(fo_file):
         if "StrkPric" in fo_df.columns:
             fo_df = fo_df.drop(columns=["StrkPric"])
 
-        # Filter Stock Futures (STF), Index Futures (IDF), and **Stock Options (STO)**
-        fo_df = fo_df[fo_df["Instrument Type"].isin(["STF", "IDF", "STO"])]
+        # Filter only Stock Futures (STF) and Stock Options (STO)
+        fo_df = fo_df[fo_df["Instrument Type"].isin(["STF", "STO"])]
 
         # Check required columns
-        required_fo_cols = ["Script Name", "Open Interest", "Future OI Change", "Expiry Date", "Option Type"]
+        required_fo_cols = ["Script Name", "Future OI", "Change in Future OI", "Expiry Date", "Option Type"]
         missing_cols = [col for col in required_fo_cols if col not in fo_df.columns]
 
         if missing_cols:
@@ -97,17 +97,23 @@ def process_fo_bhavcopy(fo_file):
         fo_df["Expiry Date"] = fo_df["Expiry Date"].astype(str)
 
         # Clean numeric values
-        fo_df = clean_numeric_data(fo_df, ["Open Interest", "Future OI Change"])
+        fo_df = clean_numeric_data(fo_df, ["Future OI", "Change in Future OI"])
 
-        # **Calculate Total Call OI and Total Put OI for each Script Name and Expiry Date**
-        call_oi = fo_df[fo_df["Option Type"] == "CE"].groupby(["Script Name", "Expiry Date"])["Open Interest"].sum().reset_index()
-        put_oi = fo_df[fo_df["Option Type"] == "PE"].groupby(["Script Name", "Expiry Date"])["Open Interest"].sum().reset_index()
+        # Apply Expiry Date Filter
+        expiry_dates = fo_df["Expiry Date"].dropna().unique()
+        selected_expiry = st.sidebar.selectbox("📅 Select Expiry Date", ["All"] + list(expiry_dates))
+        if selected_expiry != "All":
+            fo_df = fo_df[fo_df["Expiry Date"] == selected_expiry]
 
-        call_oi.rename(columns={"Open Interest": "Total Call OI"}, inplace=True)
-        put_oi.rename(columns={"Open Interest": "Total Put OI"}, inplace=True)
+        # **Calculate Total Call OI and Total Put OI**
+        call_oi = fo_df[fo_df["Option Type"] == "CE"].groupby("Script Name")["Future OI"].sum().reset_index()
+        put_oi = fo_df[fo_df["Option Type"] == "PE"].groupby("Script Name")["Future OI"].sum().reset_index()
+
+        call_oi.rename(columns={"Future OI": "Total Call OI"}, inplace=True)
+        put_oi.rename(columns={"Future OI": "Total Put OI"}, inplace=True)
 
         # Merge F&O Data
-        fo_final = fo_df.merge(call_oi, on=["Script Name", "Expiry Date"], how="left").merge(put_oi, on=["Script Name", "Expiry Date"], how="left")
+        fo_final = fo_df.merge(call_oi, on="Script Name", how="left").merge(put_oi, on="Script Name", how="left")
 
         # Ensure all OI values are numeric and fill NaN with 0
         fo_final["Total Call OI"] = fo_final["Total Call OI"].fillna(0).round(2)
@@ -121,7 +127,7 @@ def process_fo_bhavcopy(fo_file):
         )
 
         # Select required columns
-        final_df = fo_final[["Script Name", "Expiry Date", "Future OI Change", "Total Call OI", "Total Put OI", "PCR"]]
+        final_df = fo_final[["Script Name", "Expiry Date", "Future OI", "Change in Future OI", "Total Call OI", "Total Put OI", "PCR"]]
 
         return final_df
 
@@ -139,25 +145,10 @@ if fo_file:
     fo_df = process_fo_bhavcopy(fo_file)
 
 if cash_df is not None:
-    st.success("✅ Cash Market file processed successfully!")
-
-    # Display Cash Market Data
     st.subheader("📊 Cash Market Data")
     st.dataframe(cash_df)
 
 if fo_df is not None:
-    st.success("✅ F&O Bhavcopy file processed successfully!")
-
-    # Sidebar Filters for F&O Data
-    st.sidebar.header("🔍 F&O Filters")
-
-    # Expiry Date Filter
-    expiry_dates = fo_df["Expiry Date"].dropna().unique()
-    selected_expiry = st.sidebar.selectbox("📅 Select Expiry Date", ["All"] + list(expiry_dates))
-    if selected_expiry != "All":
-        fo_df = fo_df[fo_df["Expiry Date"] == selected_expiry]
-
-    # Display F&O Data
     st.subheader("📊 F&O Stock Analysis")
     st.dataframe(fo_df)
 
