@@ -1,156 +1,59 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 
-# Streamlit UI
-st.title("NSE EOD Data Upload & Analysis")
+def load_data(fo_file, cash_file):
+    # Load F&O Bhavcopy
+    fo_df = pd.read_csv(fo_file)
+    
+    # Process Futures Data
+    futures_data = fo_df[fo_df["FinInstrmTp"] == "FUTSTK"].groupby(["TckrSymb", "XpryDt"]).agg(
+        Future_OI=("OpnIntrst", "sum"),
+        Future_OI_Change=("ChngInOpnIntrst", "sum")
+    ).reset_index()
+    
+    # Process Options Data (Aggregate Call & Put OI)
+    options_data = fo_df[fo_df["FinInstrmTp"] == "STO"].groupby(["TckrSymb", "XpryDt", "OptnTp"]) \
+        ["OpnIntrst"].sum().unstack().fillna(0)
+    options_data = options_data.rename(columns={"CE": "Total_Call_OI", "PE": "Total_Put_OI"})
+    options_data["PCR"] = options_data["Total_Put_OI"] / options_data["Total_Call_OI"]
+    options_data = options_data.reset_index()
+    
+    # Merge Futures & Options Data
+    fo_summary = futures_data.merge(options_data, on=["TckrSymb", "XpryDt"], how="outer")
+    
+    # Load Cash Market Bhavcopy
+    cash_df = pd.read_csv(cash_file)
+    cash_df = cash_df.rename(columns=lambda x: x.strip())
+    cash_df = cash_df[["SYMBOL", "CLOSE_PRICE", "DELIV_PER"]]
+    cash_df = cash_df[cash_df["DELIV_PER"] != "-"]
+    cash_df["DELIV_PER"] = pd.to_numeric(cash_df["DELIV_PER"], errors="coerce")
+    
+    # Merge Cash Market Data
+    final_summary = fo_summary.merge(cash_df, left_on="TckrSymb", right_on="SYMBOL", how="left").drop(columns=["SYMBOL"])
+    final_summary = final_summary.round(2)
+    
+    return final_summary
 
-# File upload widgets
-st.sidebar.header("Upload Bhavcopy Files")
-cash_file = st.sidebar.file_uploader("Upload Cash Market Bhavcopy (CSV)", type=["csv"])
-fo_file = st.sidebar.file_uploader("Upload F&O Bhavcopy (CSV)", type=["csv"])
+def main():
+    st.title("NSE F&O and Cash Market Data Analysis")
+    
+    fo_file = st.file_uploader("Upload F&O Bhavcopy CSV", type=["csv"])
+    cash_file = st.file_uploader("Upload Cash Market Bhavcopy CSV", type=["csv"])
+    
+    if fo_file and cash_file:
+        processed_data = load_data(fo_file, cash_file)
+        st.dataframe(processed_data)
+        
+        # Filters
+        stock_filter = st.selectbox("Select Stock", ["All"] + list(processed_data["TckrSymb"].unique()))
+        expiry_filter = st.selectbox("Select Expiry Date", ["All"] + list(processed_data["XpryDt"].unique()))
+        
+        if stock_filter != "All":
+            processed_data = processed_data[processed_data["TckrSymb"] == stock_filter]
+        if expiry_filter != "All":
+            processed_data = processed_data[processed_data["XpryDt"] == expiry_filter]
+        
+        st.dataframe(processed_data)
 
-# Column Mapping for Cash Market CSV
-cash_column_mapping = {
-    "SYMBOL": "Script Name",
-    "OPEN_PRICE": "Open",
-    "HIGH_PRICE": "High",
-    "LOW_PRICE": "Low",
-    "LAST_PRICE": "Close",
-    "DELIV_PER": "Delivery %"
-}
-
-# Column Mapping for F&O Bhavcopy CSV
-fo_column_mapping = {
-    "TckrSymb": "Script Name",
-    "OpnIntrst": "Future OI",
-    "ChngInOpnIntrst": "Change in Future OI",
-    "OptnTp": "Option Type",
-    "XpryDt": "Expiry Date",
-    "FinInstrmTp": "Instrument Type"
-}
-
-# Function to clean and rename columns
-def clean_columns(df, column_mapping):
-    df.columns = df.columns.str.strip()  # Remove leading/trailing spaces
-    df.rename(columns={col: column_mapping[col] for col in df.columns if col in column_mapping}, inplace=True)
-    return df
-
-# Function to handle missing or invalid numeric values
-def clean_numeric_data(df, columns):
-    for col in columns:
-        if col in df.columns:
-            df[col] = df[col].replace(' -', np.nan)  # Replace invalid values with NaN
-            df[col] = pd.to_numeric(df[col], errors="coerce")  # Convert to float (NaN for errors)
-            df[col] = df[col].fillna(0)  # Replace NaN with 0
-            df[col] = df[col].round(2)  # Round to 2 decimal places
-    return df
-
-# Processing Function for Cash Market Data
-def process_cash_market(cash_file):
-    try:
-        # Load Cash Market Data
-        cash_df = pd.read_csv(cash_file)
-        cash_df = clean_columns(cash_df, cash_column_mapping)
-
-        # Check required columns
-        required_cash_cols = ["Script Name", "Open", "High", "Low", "Close", "Delivery %"]
-        if not all(col in cash_df.columns for col in required_cash_cols):
-            st.error(f"⚠️ Cash Market CSV is missing columns: {set(required_cash_cols) - set(cash_df.columns)}")
-            return None
-
-        # Clean numeric values
-        cash_df = clean_numeric_data(cash_df, ["Open", "High", "Low", "Close", "Delivery %"])
-
-        # Keep only required columns
-        cash_df = cash_df[["Script Name", "Open", "High", "Low", "Close", "Delivery %"]]
-
-        return cash_df
-
-    except Exception as e:
-        st.error(f"❌ Error processing Cash Market file: {str(e)}")
-        return None
-
-# Processing Function for F&O Bhavcopy Data
-def process_fo_bhavcopy(fo_file):
-    try:
-        # Load F&O Bhavcopy Data
-        fo_df = pd.read_csv(fo_file)
-        fo_df = clean_columns(fo_df, fo_column_mapping)
-
-        # Ignore StrkPric column if it exists
-        if "StrkPric" in fo_df.columns:
-            fo_df = fo_df.drop(columns=["StrkPric"])
-
-        # Filter only Stock Futures (STF) and Stock Options (STO)
-        fo_df = fo_df[fo_df["Instrument Type"].isin(["STF", "STO"])]
-
-        # Check required columns
-        required_fo_cols = ["Script Name", "Future OI", "Change in Future OI", "Expiry Date", "Option Type"]
-        missing_cols = [col for col in required_fo_cols if col not in fo_df.columns]
-
-        if missing_cols:
-            st.error(f"⚠️ **F&O CSV is missing columns:** {missing_cols}")
-            return None
-
-        # Ensure 'Expiry Date' is of string type
-        fo_df["Expiry Date"] = fo_df["Expiry Date"].astype(str)
-
-        # Clean numeric values
-        fo_df = clean_numeric_data(fo_df, ["Future OI", "Change in Future OI"])
-
-        # Apply Expiry Date Filter
-        expiry_dates = fo_df["Expiry Date"].dropna().unique()
-        selected_expiry = st.sidebar.selectbox("📅 Select Expiry Date", ["All"] + list(expiry_dates))
-        if selected_expiry != "All":
-            fo_df = fo_df[fo_df["Expiry Date"] == selected_expiry]
-
-        # **Calculate Total Call OI and Total Put OI**
-        call_oi = fo_df[fo_df["Option Type"] == "CE"].groupby("Script Name")["Future OI"].sum().reset_index()
-        put_oi = fo_df[fo_df["Option Type"] == "PE"].groupby("Script Name")["Future OI"].sum().reset_index()
-
-        call_oi.rename(columns={"Future OI": "Total Call OI"}, inplace=True)
-        put_oi.rename(columns={"Future OI": "Total Put OI"}, inplace=True)
-
-        # Merge F&O Data
-        fo_final = fo_df.merge(call_oi, on="Script Name", how="left").merge(put_oi, on="Script Name", how="left")
-
-        # Ensure all OI values are numeric and fill NaN with 0
-        fo_final["Total Call OI"] = fo_final["Total Call OI"].fillna(0).round(2)
-        fo_final["Total Put OI"] = fo_final["Total Put OI"].fillna(0).round(2)
-
-        # Calculate PCR (Put-Call Ratio) and handle division errors
-        fo_final["PCR"] = np.where(
-            fo_final["Total Call OI"] > 0, 
-            (fo_final["Total Put OI"] / fo_final["Total Call OI"]).round(2), 
-            0
-        )
-
-        # Select required columns
-        final_df = fo_final[["Script Name", "Expiry Date", "Future OI", "Change in Future OI", "Total Call OI", "Total Put OI", "PCR"]]
-
-        return final_df
-
-    except Exception as e:
-        st.error(f"❌ Error processing F&O Bhavcopy file: {str(e)}")
-        return None
-
-# Process files after upload
-cash_df, fo_df = None, None
-
-if cash_file:
-    cash_df = process_cash_market(cash_file)
-
-if fo_file:
-    fo_df = process_fo_bhavcopy(fo_file)
-
-if cash_df is not None:
-    st.subheader("📊 Cash Market Data")
-    st.dataframe(cash_df)
-
-if fo_df is not None:
-    st.subheader("📊 F&O Stock Analysis")
-    st.dataframe(fo_df)
-
-else:
-    st.warning("⚠️ Please upload both Cash Market & F&O Bhavcopy files.")
+if __name__ == "__main__":
+    main()
