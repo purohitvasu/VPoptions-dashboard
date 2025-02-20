@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 def load_data(fo_file, cash_file):
     # Load F&O Bhavcopy
@@ -39,25 +40,49 @@ def load_data(fo_file, cash_file):
 def main():
     st.title("NSE F&O and Cash Market Data Analysis")
     
-    fo_file = st.file_uploader("Upload F&O Bhavcopy CSV", type=["csv"])
-    cash_file = st.file_uploader("Upload Cash Market Bhavcopy CSV", type=["csv"])
+    with st.sidebar:
+        fo_file = st.file_uploader("Upload F&O Bhavcopy CSV", type=["csv"])
+        cash_file = st.file_uploader("Upload Cash Market Bhavcopy CSV", type=["csv"])
     
     if fo_file and cash_file:
         processed_data = load_data(fo_file, cash_file)
         
-        # Filters
-        expiry_filter = st.selectbox("Select Expiry Date", ["All"] + list(processed_data["XpryDt"].dropna().unique()))
-        pcr_min, pcr_max = processed_data["PCR"].dropna().min(), processed_data["PCR"].dropna().max()
-        pcr_filter = st.slider("Select PCR Range", min_value=float(pcr_min), max_value=float(pcr_max), value=(max(0.0, pcr_min), min(1.5, pcr_max)))
-        deliv_min, deliv_max = processed_data["DELIV_PER"].dropna().min(), processed_data["DELIV_PER"].dropna().max()
-        delivery_filter = st.slider("Select Delivery Percentage Range", min_value=float(deliv_min), max_value=float(deliv_max), value=(max(10.0, deliv_min), min(90.0, deliv_max)))
+        # Filters in Sidebar
+        with st.sidebar:
+            expiry_filter = st.selectbox("Select Expiry Date", ["All"] + list(processed_data["XpryDt"].dropna().unique()))
+            pcr_min, pcr_max = processed_data["PCR"].dropna().min(), processed_data["PCR"].dropna().max()
+            pcr_filter = st.slider("Select PCR Range", min_value=float(pcr_min), max_value=float(pcr_max), value=(max(0.0, pcr_min), min(1.5, pcr_max)))
+            deliv_min, deliv_max = processed_data["DELIV_PER"].dropna().min(), processed_data["DELIV_PER"].dropna().max()
+            delivery_filter = st.slider("Select Delivery Percentage Range", min_value=float(deliv_min), max_value=float(deliv_max), value=(max(10.0, deliv_min), min(90.0, deliv_max)))
         
         if expiry_filter != "All":
             processed_data = processed_data[processed_data["XpryDt"] == expiry_filter]
         processed_data = processed_data[(processed_data["PCR"] >= pcr_filter[0]) & (processed_data["PCR"] <= pcr_filter[1])]
         processed_data = processed_data[(processed_data["DELIV_PER"] >= delivery_filter[0]) & (processed_data["DELIV_PER"] <= delivery_filter[1])]
         
-        st.dataframe(processed_data)
+        # Graphs
+        st.subheader("Futures Open Interest Trends")
+        fig, ax = plt.subplots()
+        for symbol in processed_data["TckrSymb"].unique():
+            subset = processed_data[processed_data["TckrSymb"] == symbol]
+            ax.plot(subset["XpryDt"], subset["Future_OI"], label=symbol)
+        ax.set_xlabel("Expiry Date")
+        ax.set_ylabel("Future Open Interest")
+        ax.legend()
+        st.pyplot(fig)
+        
+        st.subheader("Put-Call Ratio (PCR) Analysis")
+        st.bar_chart(processed_data.set_index("TckrSymb")["PCR"])
+        
+        st.subheader("Delivery Percentage Distribution")
+        st.hist_chart(processed_data["DELIV_PER"])
+        
+        st.subheader("OI Change vs Price Movement")
+        fig, ax = plt.subplots()
+        ax.scatter(processed_data["Future_OI_Change"], processed_data["CLOSE_PRICE"])
+        ax.set_xlabel("Change in Future OI")
+        ax.set_ylabel("Closing Price")
+        st.pyplot(fig)
 
 if __name__ == "__main__":
     main()
