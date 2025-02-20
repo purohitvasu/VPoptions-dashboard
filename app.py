@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 
 def load_data(fo_file, cash_file):
     # Load F&O Bhavcopy
@@ -16,6 +17,7 @@ def load_data(fo_file, cash_file):
         ["OpnIntrst"].sum().unstack().fillna(0)
     options_data = options_data.rename(columns={"CE": "Total_Call_OI", "PE": "Total_Put_OI"})
     options_data["PCR"] = options_data["Total_Put_OI"] / options_data["Total_Call_OI"]
+    options_data["PCR"] = options_data["PCR"].replace([np.inf, -np.inf], np.nan).fillna(0)
     options_data = options_data.reset_index()
     
     # Merge Futures & Options Data
@@ -45,12 +47,12 @@ def main():
         st.dataframe(processed_data)
         
         # Filters
-        stock_filter = st.selectbox("Select Stock", ["All"] + list(processed_data["TckrSymb"].unique()))
-        expiry_filter = st.selectbox("Select Expiry Date", ["All"] + list(processed_data["XpryDt"].unique()))
-        pcr_filter = st.slider("Select PCR Range", min_value=float(processed_data["PCR"].min()), 
-                               max_value=float(processed_data["PCR"].max()), value=(0.5, 1.5))
-        delivery_filter = st.slider("Select Delivery Percentage Range", min_value=float(processed_data["DELIV_PER"].min()), 
-                                    max_value=float(processed_data["DELIV_PER"].max()), value=(10.0, 90.0))
+        stock_filter = st.selectbox("Select Stock", ["All"] + list(processed_data["TckrSymb"].dropna().unique()))
+        expiry_filter = st.selectbox("Select Expiry Date", ["All"] + list(processed_data["XpryDt"].dropna().unique()))
+        pcr_min, pcr_max = processed_data["PCR"].dropna().min(), processed_data["PCR"].dropna().max()
+        pcr_filter = st.slider("Select PCR Range", min_value=float(pcr_min), max_value=float(pcr_max), value=(max(0.0, pcr_min), min(1.5, pcr_max)))
+        deliv_min, deliv_max = processed_data["DELIV_PER"].dropna().min(), processed_data["DELIV_PER"].dropna().max()
+        delivery_filter = st.slider("Select Delivery Percentage Range", min_value=float(deliv_min), max_value=float(deliv_max), value=(max(10.0, deliv_min), min(90.0, deliv_max)))
         
         if stock_filter != "All":
             processed_data = processed_data[processed_data["TckrSymb"] == stock_filter]
