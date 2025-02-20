@@ -78,6 +78,10 @@ def process_fo_bhavcopy(fo_file):
         fo_df = pd.read_csv(fo_file)
         fo_df = clean_columns(fo_df, fo_column_mapping)
 
+        # Ignore StrkPric column if it exists
+        if "StrkPric" in fo_df.columns:
+            fo_df = fo_df.drop(columns=["StrkPric"])
+
         # Filter Stock Futures (STF), Index Futures (IDF), and **Stock Options (STO)**
         fo_df = fo_df[fo_df["Instrument Type"].isin(["STF", "IDF", "STO"])]
 
