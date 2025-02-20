@@ -1,102 +1,97 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
+import websocket
+import json
+import threading
 import numpy as np
 
-# List of NIFTY 50 Stocks and their Yahoo Finance Symbols
+# Load API credentials from Streamlit secrets
+access_token = st.secrets["secrets"]["DHAN_ACCESS_TOKEN"]
+
+# Define WebSocket URL for Dhan Live Market Feed
+ws_url = f"wss://api-feed.dhan.co?version=2&token={access_token}&authType=2"
+
+# NIFTY 50 Stock List (Symbol: SecurityID)
 nifty50_stocks = {
-    "RELIANCE": "RELIANCE.NS",
-    "TCS": "TCS.NS",
-    "INFY": "INFY.NS",
-    "HDFC BANK": "HDFCBANK.NS",
-    "ICICI BANK": "ICICIBANK.NS",
-    "HUL": "HINDUNILVR.NS",
-    "SBI": "SBIN.NS",
-    "TATA MOTORS": "TATAMOTORS.NS",
-    "BAJAJ FINANCE": "BAJFINANCE.NS",
-    "ASIAN PAINTS": "ASIANPAINT.NS",
-    "WIPRO": "WIPRO.NS",
-    "BHARTI AIRTEL": "BHARTIARTL.NS",
-    "SUN PHARMA": "SUNPHARMA.NS",
-    "KOTAK MAHINDRA BANK": "KOTAKBANK.NS",
-    "MARUTI SUZUKI": "MARUTI.NS",
-    "HCL TECHNOLOGIES": "HCLTECH.NS",
-    "TITAN COMPANY": "TITAN.NS",
-    "ULTRATECH CEMENT": "ULTRACEMCO.NS",
-    "TECH MAHINDRA": "TECHM.NS",
-    "NTPC": "NTPC.NS",
-    "GRASIM INDUSTRIES": "GRASIM.NS",
-    "POWER GRID CORP": "POWERGRID.NS",
-    "BAJAJ AUTO": "BAJAJ-AUTO.NS",
-    "LARSEN & TOUBRO": "LT.NS",
-    "DR REDDY'S LABS": "DRREDDY.NS",
-    "ADANI ENTERPRISES": "ADANIENT.NS",
-    "JSW STEEL": "JSWSTEEL.NS",
-    "AXIS BANK": "AXISBANK.NS",
-    "INDUSIND BANK": "INDUSINDBK.NS",
-    "HERO MOTOCORP": "HEROMOTOCO.NS",
-    "COAL INDIA": "COALINDIA.NS",
-    "BPCL": "BPCL.NS",
-    "ONGC": "ONGC.NS",
-    "HINDALCO": "HINDALCO.NS",
-    "TATA STEEL": "TATASTEEL.NS",
-    "CIPLA": "CIPLA.NS",
-    "EICHER MOTORS": "EICHERMOT.NS",
-    "DIVIS LABORATORIES": "DIVISLAB.NS",
-    "BRITANNIA": "BRITANNIA.NS",
-    "BAJAJ FINSERV": "BAJAJFINSV.NS",
-    "TATA CONSUMER": "TATACONSUM.NS",
-    "M&M": "M&M.NS",
-    "UPL": "UPL.NS",
-    "SHREE CEMENT": "SHREECEM.NS",
-    "SIEMENS": "SIEMENS.NS",
-    "PIDILITE": "PIDILITIND.NS",
-    "SRF LTD": "SRF.NS",
+    "RELIANCE": "1333",
+    "TCS": "11536",
+    "INFY": "1594",
+    "HDFC BANK": "1330",
+    "ICICI BANK": "4963",
+    "HUL": "1792",
+    "SBI": "3045",
+    "TATA MOTORS": "3456",
+    "BAJAJ FINANCE": "317",
+    "ASIAN PAINTS": "236",
+    "WIPRO": "3787",
+    "BHARTI AIRTEL": "10666",
+    "SUN PHARMA": "4345",
+    "KOTAK MAHINDRA BANK": "1922",
+    "MARUTI SUZUKI": "10999",
 }
 
-# Function to fetch stock data
-def get_stock_data(symbol):
-    stock = yf.Ticker(symbol)
-    hist = stock.history(period="5d")  # Fetch last 5 days of data
-    if hist.empty:
-        return None
+# Store Live Data
+stock_data = {symbol: {"Open": None, "High": None, "Low": None, "Close": None, "LTP": None, "SMA_5": None, "VWAP": None, "RSI": None} for symbol in nifty50_stocks}
 
-    # Compute Indicators
-    hist["SMA_5"] = hist["Close"].rolling(window=5).mean()  # 5-day Simple Moving Average
-    hist["VWAP"] = (hist["Close"] * hist["Volume"]).cumsum() / hist["Volume"].cumsum()
-    delta = hist["Close"].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-    rs = gain / loss
-    hist["RSI"] = 100 - (100 / (1 + rs))
+# WebSocket Handlers
+def on_message(ws, message):
+    data = json.loads(message)
 
-    latest_data = hist.iloc[-1]  # Get the latest data
-    return {
-        "Symbol": symbol,
-        "Open": round(latest_data["Open"], 2),
-        "High": round(latest_data["High"], 2),
-        "Low": round(latest_data["Low"], 2),
-        "Close": round(latest_data["Close"], 2),
-        "LTP": round(latest_data["Close"], 2),
-        "SMA_5": round(latest_data["SMA_5"], 2),
-        "VWAP": round(latest_data["VWAP"], 2),
-        "RSI": round(latest_data["RSI"], 2),
+    # Process the received live data
+    for item in data.get("data", []):
+        symbol_id = item.get("SecurityId")
+        for stock_name, sec_id in nifty50_stocks.items():
+            if sec_id == str(symbol_id):
+                stock_data[stock_name]["LTP"] = round(item.get("LTP", 0), 2)
+                stock_data[stock_name]["Open"] = round(item.get("Open", 0), 2)
+                stock_data[stock_name]["High"] = round(item.get("High", 0), 2)
+                stock_data[stock_name]["Low"] = round(item.get("Low", 0), 2)
+                stock_data[stock_name]["Close"] = round(item.get("Close", 0), 2)
+
+                # Calculate SMA, VWAP, RSI
+                stock_data[stock_name]["SMA_5"] = round(np.mean([stock_data[stock_name]["Close"] for _ in range(5)]), 2)
+                stock_data[stock_name]["VWAP"] = round(np.mean([stock_data[stock_name]["LTP"] for _ in range(5)]), 2)
+
+                # RSI Calculation
+                close_prices = np.array([stock_data[stock_name]["Close"] for _ in range(14)])
+                delta = np.diff(close_prices)
+                gain = np.where(delta > 0, delta, 0).mean()
+                loss = np.where(delta < 0, -delta, 0).mean()
+                rs = gain / loss if loss != 0 else 0
+                stock_data[stock_name]["RSI"] = round(100 - (100 / (1 + rs)), 2)
+
+# WebSocket Event Handlers
+def on_error(ws, error):
+    print(f"❌ WebSocket Error: {error}")
+
+def on_close(ws, close_status_code, close_msg):
+    print(f"⚠️ WebSocket Closed: {close_msg}")
+
+def on_open(ws):
+    print("✅ WebSocket Connection Established")
+    
+    # Subscribe to NIFTY 50 stocks
+    subscribe_message = {
+        "RequestCode": 15,
+        "InstrumentCount": len(nifty50_stocks),
+        "InstrumentList": [{"ExchangeSegment": "NSE_EQ", "SecurityId": sec_id} for sec_id in nifty50_stocks.values()]
     }
+    ws.send(json.dumps(subscribe_message))
+
+# Function to Start WebSocket in Background Thread
+def start_websocket():
+    ws_app = websocket.WebSocketApp(ws_url, on_open=on_open, on_message=on_message, on_error=on_error, on_close=on_close)
+    ws_app.run_forever()
+
+# Start WebSocket Thread
+ws_thread = threading.Thread(target=start_websocket, daemon=True)
+ws_thread.start()
 
 # Streamlit UI
-st.title("📊 NIFTY 50 Live Stock Dashboard")
+st.title("📊 NIFTY 50 Live Market Dashboard (Dhan API)")
 
-# Fetch all stock data
-st.write("Fetching live stock data, please wait...")
-data_list = []
-for stock_name, symbol in nifty50_stocks.items():
-    stock_data = get_stock_data(symbol)
-    if stock_data:
-        data_list.append(stock_data)
+# Display Live Stock Data in Table
+st.write("Live NIFTY 50 Market Data:")
 
-# Convert to DataFrame
-if data_list:
-    df = pd.DataFrame(data_list)
-    st.dataframe(df)
-else:
-    st.error("Failed to fetch stock data. Please try again later.")
+df = pd.DataFrame.from_dict(stock_data, orient="index")
+st.dataframe(df)
