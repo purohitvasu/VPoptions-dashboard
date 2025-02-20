@@ -9,10 +9,10 @@ st.sidebar.header("Upload Bhavcopy Files")
 cash_file = st.sidebar.file_uploader("Upload Cash Market Bhavcopy (CSV)", type=["csv"])
 fo_file = st.sidebar.file_uploader("Upload F&O Bhavcopy (CSV)", type=["csv"])
 
-# Expected column mapping (case-insensitive)
+# Expected column mapping for Cash Market CSV
 column_mapping = {
     "symbol": "Script Name",
-    "close": "Last Traded Price",
+    "last_price": "Last Traded Price",
     "deliv_per": "Delivery Percentage",
     "open_int": "Total Future OI",
     "chg_in_oi": "Change in Future OI",
@@ -24,7 +24,7 @@ column_mapping = {
 # Function to clean and rename columns
 def clean_columns(df):
     df.columns = df.columns.str.strip().str.lower()  # Remove spaces & convert to lowercase
-    df.rename(columns=column_mapping, inplace=True)
+    df.rename(columns={col: column_mapping[col] for col in df.columns if col in column_mapping}, inplace=True)
     return df
 
 # Processing Function
@@ -37,8 +37,8 @@ def process_files(cash_file, fo_file):
         # Check required columns in Cash Market Data
         required_cash_cols = ["Script Name", "Last Traded Price", "Delivery Percentage"]
         if not all(col in cash_df.columns for col in required_cash_cols):
-            st.error(f"Cash Market CSV is missing columns: {set(required_cash_cols) - set(cash_df.columns)}")
-            st.write("Columns found:", cash_df.columns)
+            st.error(f"⚠️ Cash Market CSV is missing columns: {set(required_cash_cols) - set(cash_df.columns)}")
+            st.write("🔍 **Columns found in uploaded file:**", list(cash_df.columns))
             return None
         
         cash_df["Delivery Percentage"] = cash_df["Delivery Percentage"].astype(float)
@@ -50,8 +50,8 @@ def process_files(cash_file, fo_file):
         # Check required columns in F&O Bhavcopy Data
         required_fo_cols = ["Script Name", "Total Future OI", "Change in Future OI", "Expiry Date", "Option Type"]
         if not all(col in fo_df.columns for col in required_fo_cols):
-            st.error(f"F&O CSV is missing columns: {set(required_fo_cols) - set(fo_df.columns)}")
-            st.write("Columns found:", fo_df.columns)
+            st.error(f"⚠️ F&O CSV is missing columns: {set(required_fo_cols) - set(fo_df.columns)}")
+            st.write("🔍 **Columns found in uploaded file:**", list(fo_df.columns))
             return None
 
         # Separate futures and options data
@@ -75,21 +75,21 @@ def process_files(cash_file, fo_file):
         return final_df
 
     except Exception as e:
-        st.error(f"Error processing files: {str(e)}")
+        st.error(f"❌ Error processing files: {str(e)}")
         return None
 
 # Process files after upload
 if cash_file and fo_file:
     df = process_files(cash_file, fo_file)
     if df is not None:
-        st.success("Files uploaded & processed successfully!")
+        st.success("✅ Files uploaded & processed successfully!")
         
         # Display merged data
-        st.subheader("Processed Data")
+        st.subheader("📊 Processed Data")
         st.dataframe(df)
 
-        # Allow user to download processed data
+        # Allow user to download the processed dataset
         csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button("Download Processed Data", csv, "processed_data.csv", "text/csv")
+        st.download_button("📥 Download Processed Data", csv, "processed_data.csv", "text/csv")
 else:
-    st.warning("Please upload both Cash Market & F&O Bhavcopy files.")
+    st.warning("⚠️ Please upload both Cash Market & F&O Bhavcopy files.")
