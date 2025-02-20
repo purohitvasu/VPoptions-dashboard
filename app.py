@@ -95,7 +95,7 @@ def process_fo_bhavcopy(fo_file):
         # Clean numeric values
         fo_df = clean_numeric_data(fo_df, ["Open Interest", "Future OI Change"])
 
-        # **Include STO in Total Call OI and Total Put OI calculations**
+        # **Calculate Total Call OI (sum of OpnIntrst for CE) and Total Put OI (sum of OpnIntrst for PE)**
         call_oi = fo_df[fo_df["Option Type"] == "CE"].groupby(["Script Name", "Expiry Date"])["Open Interest"].sum().reset_index()
         put_oi = fo_df[fo_df["Option Type"] == "PE"].groupby(["Script Name", "Expiry Date"])["Open Interest"].sum().reset_index()
 
@@ -136,13 +136,6 @@ if fo_file:
 
 if cash_df is not None:
     st.success("✅ Cash Market file processed successfully!")
-
-    # Sidebar Filter for Delivery Percentage
-    min_delivery, max_delivery = cash_df["Delivery %"].min(), cash_df["Delivery %"].max()
-    if min_delivery == max_delivery:
-        min_delivery, max_delivery = 0, 100  # Default range
-    delivery_range = st.sidebar.slider("📊 Select Delivery % Range", min_value=float(min_delivery), max_value=float(max_delivery), value=(float(min_delivery), float(max_delivery)))
-    cash_df = cash_df[(cash_df["Delivery %"] >= delivery_range[0]) & (cash_df["Delivery %"] <= delivery_range[1])]
 
     # Display Cash Market Data
     st.subheader("📊 Cash Market Data")
