@@ -43,14 +43,14 @@ def clean_numeric_data(df, columns):
             df[col] = df[col].round(2)  # Round to 2 decimal places
     return df
 
-# Processing Function
-def process_files(cash_file, fo_file):
+# Processing Function for Cash Market Data
+def process_cash_market(cash_file):
     try:
         # Load Cash Market Data
         cash_df = pd.read_csv(cash_file)
         cash_df = clean_columns(cash_df, cash_column_mapping)
 
-        # Check required columns in Cash Market Data
+        # Check required columns
         required_cash_cols = ["Script Name", "LTP", "Delivery %"]
         if not all(col in cash_df.columns for col in required_cash_cols):
             st.error(f"⚠️ Cash Market CSV is missing columns: {set(required_cash_cols) - set(cash_df.columns)}")
@@ -59,6 +59,15 @@ def process_files(cash_file, fo_file):
         # Clean numeric values
         cash_df = clean_numeric_data(cash_df, ["LTP", "Delivery %"])
 
+        return cash_df
+
+    except Exception as e:
+        st.error(f"❌ Error processing Cash Market file: {str(e)}")
+        return None
+
+# Processing Function for F&O Bhavcopy Data
+def process_fo_bhavcopy(fo_file):
+    try:
         # Load F&O Bhavcopy Data
         fo_df = pd.read_csv(fo_file)
         fo_df = clean_columns(fo_df, fo_column_mapping)
@@ -66,7 +75,7 @@ def process_files(cash_file, fo_file):
         # Filter only Stock Futures (STF) and Index Futures (IDF)
         fo_df = fo_df[fo_df["Instrument Type"].isin(["STF", "IDF"])]
 
-        # Check required columns in F&O Bhavcopy Data
+        # Check required columns
         required_fo_cols = ["Script Name", "Open Interest", "Future OI Change", "Expiry Date", "Option Type"]
         missing_cols = [col for col in required_fo_cols if col not in fo_df.columns]
 
@@ -80,7 +89,7 @@ def process_files(cash_file, fo_file):
         # Clean numeric values
         fo_df = clean_numeric_data(fo_df, ["Open Interest", "Future OI Change"])
 
-        # Correct Calculation of Total Call OI and Total Put OI
+        # Calculate Total Call OI (sum of CE) and Total Put OI (sum of PE)
         call_oi = fo_df[fo_df["Option Type"] == "CE"].groupby(["Script Name", "Expiry Date"])["Open Interest"].sum().reset_index()
         put_oi = fo_df[fo_df["Option Type"] == "PE"].groupby(["Script Name", "Expiry Date"])["Open Interest"].sum().reset_index()
 
@@ -101,55 +110,58 @@ def process_files(cash_file, fo_file):
             0
         )
 
-        # Merge with Cash Market Data
-        final_df = cash_df.merge(fo_final, on="Script Name", how="inner")
-
-        # Select only the required columns including Expiry Date
-        final_df = final_df[["Script Name", "Expiry Date", "LTP", "Delivery %", "Future OI Change", "Total Call OI", "Total Put OI", "PCR"]]
+        # Select required columns
+        final_df = fo_final[["Script Name", "Expiry Date", "Future OI Change", "Total Call OI", "Total Put OI", "PCR"]]
 
         return final_df
 
     except Exception as e:
-        st.error(f"❌ Error processing files: {str(e)}")
+        st.error(f"❌ Error processing F&O Bhavcopy file: {str(e)}")
         return None
 
 # Process files after upload
-if cash_file and fo_file:
-    df = process_files(cash_file, fo_file)
-    if df is not None:
-        st.success("✅ Files uploaded & processed successfully!")
+cash_df, fo_df = None, None
 
-        # Sidebar Filters
-        st.sidebar.header("🔍 Filters")
+if cash_file:
+    cash_df = process_cash_market(cash_file)
 
-        # Expiry Date Filter
-        expiry_dates = df["Expiry Date"].dropna().unique()
-        selected_expiry = st.sidebar.selectbox("📅 Select Expiry Date", ["All"] + list(expiry_dates))
-        if selected_expiry != "All":
-            df = df[df["Expiry Date"] == selected_expiry]
+if fo_file:
+    fo_df = process_fo_bhavcopy(fo_file)
 
-        # PCR Filter (Avoid slider error)
-        min_pcr, max_pcr = df["PCR"].min(), df["PCR"].max()
-        if min_pcr == max_pcr:
-            min_pcr, max_pcr = 0, 1  # Default range
-        
-        pcr_range = st.sidebar.slider("📈 Select PCR Range", min_value=float(min_pcr), max_value=float(max_pcr), value=(float(min_pcr), float(max_pcr)))
-        df = df[(df["PCR"] >= pcr_range[0]) & (df["PCR"] <= pcr_range[1])]
+if cash_df is not None:
+    st.success("✅ Cash Market file processed successfully!")
 
-        # Delivery Percentage Filter (Avoid slider error)
-        min_delivery, max_delivery = df["Delivery %"].min(), df["Delivery %"].max()
-        if min_delivery == max_delivery:
-            min_delivery, max_delivery = 0, 100  # Default range
-        
-        delivery_range = st.sidebar.slider("📊 Select Delivery % Range", min_value=float(min_delivery), max_value=float(max_delivery), value=(float(min_delivery), float(max_delivery)))
-        df = df[(df["Delivery %"] >= delivery_range[0]) & (df["Delivery %"] <= delivery_range[1])]
+    # Display Cash Market Data
+    st.subheader("📊 Cash Market Data")
+    st.dataframe(cash_df)
 
-        # Display merged data
-        st.subheader("📊 F&O Stock Analysis")
-        st.dataframe(df)
+    # Allow user to download the processed dataset
+    csv_cash = cash_df.to_csv(index=False).encode("utf-8")
+    st.download_button("📥 Download Cash Market Data", csv_cash, "cash_market_data.csv", "text/csv")
 
-        # Allow user to download the processed dataset
-        csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button("📥 Download Processed Data", csv, "processed_data.csv", "text/csv")
+if fo_df is not None:
+    st.success("✅ F&O Bhavcopy file processed successfully!")
+
+    # Sidebar Filters for F&O Data
+    st.sidebar.header("🔍 F&O Filters")
+
+    # Expiry Date Filter
+    expiry_dates = fo_df["Expiry Date"].dropna().unique()
+    selected_expiry = st.sidebar.selectbox("📅 Select Expiry Date", ["All"] + list(expiry_dates))
+    if selected_expiry != "All":
+        fo_df = fo_df[fo_df["Expiry Date"] == selected_expiry]
+
+    # PCR Filter
+    min_pcr, max_pcr = fo_df["PCR"].min(), fo_df["PCR"].max()
+    pcr_range = st.sidebar.slider("📈 Select PCR Range", min_value=float(min_pcr), max_value=float(max_pcr), value=(float(min_pcr), float(max_pcr)))
+    fo_df = fo_df[(fo_df["PCR"] >= pcr_range[0]) & (fo_df["PCR"] <= pcr_range[1])]
+
+    # Display F&O Data
+    st.subheader("📊 F&O Stock Analysis")
+    st.dataframe(fo_df)
+
+    # Allow user to download the processed dataset
+    csv_fo = fo_df.to_csv(index=False).encode("utf-8")
+    st.download_button("📥 Download F&O Bhavcopy Data", csv_fo, "fo_bhavcopy_data.csv", "text/csv")
 else:
     st.warning("⚠️ Please upload both Cash Market & F&O Bhavcopy files.")
