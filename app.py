@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import altair as alt
 
 def load_data(fo_file, cash_file):
     # Load F&O Bhavcopy
@@ -50,8 +49,7 @@ def main():
         # Filters in Sidebar
         with st.sidebar:
             expiry_filter = st.selectbox("Select Expiry Date", ["All"] + list(processed_data["XpryDt"].dropna().unique()))
-            pcr_min, pcr_max = processed_data["PCR"].dropna().min(), processed_data["PCR"].dropna().max()
-            pcr_filter = st.slider("Select PCR Range", min_value=float(pcr_min), max_value=float(pcr_max), value=(max(0.0, pcr_min), min(1.5, pcr_max)))
+            pcr_filter = st.slider("Select PCR Range", min_value=0.0, max_value=1.5, value=(0.0, 1.5))
             deliv_min, deliv_max = processed_data["DELIV_PER"].dropna().min(), processed_data["DELIV_PER"].dropna().max()
             delivery_filter = st.slider("Select Delivery Percentage Range", min_value=float(deliv_min), max_value=float(deliv_max), value=(max(10.0, deliv_min), min(90.0, deliv_max)))
         
@@ -60,37 +58,8 @@ def main():
         processed_data = processed_data[(processed_data["PCR"] >= pcr_filter[0]) & (processed_data["PCR"] <= pcr_filter[1])]
         processed_data = processed_data[(processed_data["DELIV_PER"] >= delivery_filter[0]) & (processed_data["DELIV_PER"] <= delivery_filter[1])]
         
-        # Graphs using Altair
-        st.subheader("Futures Open Interest Trends")
-        line_chart = alt.Chart(processed_data).mark_line().encode(
-            x="XpryDt:T",
-            y="Future_OI:Q",
-            color="TckrSymb:N"
-        )
-        st.altair_chart(line_chart, use_container_width=True)
-        
-        st.subheader("Put-Call Ratio (PCR) Analysis")
-        bar_chart = alt.Chart(processed_data).mark_bar().encode(
-            x="TckrSymb:N",
-            y="PCR:Q",
-            color="TckrSymb:N"
-        )
-        st.altair_chart(bar_chart, use_container_width=True)
-        
-        st.subheader("Delivery Percentage Distribution")
-        hist_chart = alt.Chart(processed_data).mark_bar().encode(
-            x=alt.X("DELIV_PER:Q", bin=True),
-            y="count()"
-        )
-        st.altair_chart(hist_chart, use_container_width=True)
-        
-        st.subheader("OI Change vs Price Movement")
-        scatter_plot = alt.Chart(processed_data).mark_circle().encode(
-            x="Future_OI_Change:Q",
-            y="CLOSE_PRICE:Q",
-            color="TckrSymb:N"
-        )
-        st.altair_chart(scatter_plot, use_container_width=True)
+        # Display table only
+        st.dataframe(processed_data)
 
 if __name__ == "__main__":
     main()
