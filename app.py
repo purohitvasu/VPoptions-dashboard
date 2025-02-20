@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import altair as alt
 
 def load_data(fo_file, cash_file):
     # Load F&O Bhavcopy
@@ -60,29 +61,37 @@ def main():
         processed_data = processed_data[(processed_data["PCR"] >= pcr_filter[0]) & (processed_data["PCR"] <= pcr_filter[1])]
         processed_data = processed_data[(processed_data["DELIV_PER"] >= delivery_filter[0]) & (processed_data["DELIV_PER"] <= delivery_filter[1])]
         
-        # Graphs
+        # Graphs using Altair
         st.subheader("Futures Open Interest Trends")
-        fig, ax = plt.subplots()
-        for symbol in processed_data["TckrSymb"].unique():
-            subset = processed_data[processed_data["TckrSymb"] == symbol]
-            ax.plot(subset["XpryDt"], subset["Future_OI"], label=symbol)
-        ax.set_xlabel("Expiry Date")
-        ax.set_ylabel("Future Open Interest")
-        ax.legend()
-        st.pyplot(fig)
+        line_chart = alt.Chart(processed_data).mark_line().encode(
+            x="XpryDt:T",
+            y="Future_OI:Q",
+            color="TckrSymb:N"
+        )
+        st.altair_chart(line_chart, use_container_width=True)
         
         st.subheader("Put-Call Ratio (PCR) Analysis")
-        st.bar_chart(processed_data.set_index("TckrSymb")["PCR"])
+        bar_chart = alt.Chart(processed_data).mark_bar().encode(
+            x="TckrSymb:N",
+            y="PCR:Q",
+            color="TckrSymb:N"
+        )
+        st.altair_chart(bar_chart, use_container_width=True)
         
         st.subheader("Delivery Percentage Distribution")
-        st.hist_chart(processed_data["DELIV_PER"])
+        hist_chart = alt.Chart(processed_data).mark_bar().encode(
+            x=alt.X("DELIV_PER:Q", bin=True),
+            y="count()"
+        )
+        st.altair_chart(hist_chart, use_container_width=True)
         
         st.subheader("OI Change vs Price Movement")
-        fig, ax = plt.subplots()
-        ax.scatter(processed_data["Future_OI_Change"], processed_data["CLOSE_PRICE"])
-        ax.set_xlabel("Change in Future OI")
-        ax.set_ylabel("Closing Price")
-        st.pyplot(fig)
+        scatter_plot = alt.Chart(processed_data).mark_circle().encode(
+            x="Future_OI_Change:Q",
+            y="CLOSE_PRICE:Q",
+            color="TckrSymb:N"
+        )
+        st.altair_chart(scatter_plot, use_container_width=True)
 
 if __name__ == "__main__":
     main()
