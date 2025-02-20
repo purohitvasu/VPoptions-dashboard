@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 
 # Streamlit UI
 st.title("NSE EOD Data Upload & Analysis")
@@ -9,7 +10,7 @@ st.sidebar.header("Upload Bhavcopy Files")
 cash_file = st.sidebar.file_uploader("Upload Cash Market Bhavcopy (CSV)", type=["csv"])
 fo_file = st.sidebar.file_uploader("Upload F&O Bhavcopy (CSV)", type=["csv"])
 
-# Expected column mapping for Cash Market CSV
+# Expected column mapping
 column_mapping = {
     "symbol": "Script Name",
     "last_price": "Last Traded Price",
@@ -27,6 +28,15 @@ def clean_columns(df):
     df.rename(columns={col: column_mapping[col] for col in df.columns if col in column_mapping}, inplace=True)
     return df
 
+# Function to handle missing or invalid numeric values
+def clean_numeric_data(df, columns):
+    for col in columns:
+        if col in df.columns:
+            df[col] = df[col].replace(' -', np.nan)  # Replace invalid values with NaN
+            df[col] = pd.to_numeric(df[col], errors="coerce")  # Convert to float (NaN for errors)
+            df[col] = df[col].fillna(0)  # Replace NaN with 0 or other fallback value
+    return df
+
 # Processing Function
 def process_files(cash_file, fo_file):
     try:
@@ -40,8 +50,9 @@ def process_files(cash_file, fo_file):
             st.error(f"⚠️ Cash Market CSV is missing columns: {set(required_cash_cols) - set(cash_df.columns)}")
             st.write("🔍 **Columns found in uploaded file:**", list(cash_df.columns))
             return None
-        
-        cash_df["Delivery Percentage"] = cash_df["Delivery Percentage"].astype(float)
+
+        # Clean numeric values
+        cash_df = clean_numeric_data(cash_df, ["Last Traded Price", "Delivery Percentage"])
 
         # Load F&O Bhavcopy Data
         fo_df = pd.read_csv(fo_file)
@@ -53,6 +64,9 @@ def process_files(cash_file, fo_file):
             st.error(f"⚠️ F&O CSV is missing columns: {set(required_fo_cols) - set(fo_df.columns)}")
             st.write("🔍 **Columns found in uploaded file:**", list(fo_df.columns))
             return None
+
+        # Clean numeric values
+        fo_df = clean_numeric_data(fo_df, ["Total Future OI", "Change in Future OI"])
 
         # Separate futures and options data
         futures_df = fo_df[fo_df["Option Type"].isna()][["Script Name", "Total Future OI", "Change in Future OI"]]
