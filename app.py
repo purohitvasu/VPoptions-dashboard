@@ -117,21 +117,17 @@ if cash_file and fo_file:
             df = df[df["Expiry Date"] == selected_expiry]
 
         # PCR Filter (Handling NaN & sorting issue)
-        if df["PCR"].notna().sum() > 0:  # Ensure PCR has valid values
-            min_pcr = df["PCR"].min()
-            max_pcr = df["PCR"].max()
-        else:
-            min_pcr, max_pcr = 0, 1  # Default safe values
-        
+        min_pcr, max_pcr = df["PCR"].min(), df["PCR"].max()
+        if min_pcr == max_pcr:  # Avoid slider error
+            min_pcr, max_pcr = 0, 1
+
         pcr_range = st.sidebar.slider("📈 Select PCR Range", min_value=float(min_pcr), max_value=float(max_pcr), value=(float(min_pcr), float(max_pcr)))
         df = df[(df["PCR"] >= pcr_range[0]) & (df["PCR"] <= pcr_range[1])]
 
         # Delivery Percentage Filter (Handling NaN & sorting issue)
-        if df["Delivery %"].notna().sum() > 0:  # Ensure Delivery % has valid values
-            min_delivery = df["Delivery %"].min()
-            max_delivery = df["Delivery %"].max()
-        else:
-            min_delivery, max_delivery = 0, 100  # Default safe values
+        min_delivery, max_delivery = df["Delivery %"].min(), df["Delivery %"].max()
+        if min_delivery == max_delivery:  # Avoid slider error
+            min_delivery, max_delivery = 0, 100
         
         delivery_range = st.sidebar.slider("📊 Select Delivery % Range", min_value=float(min_delivery), max_value=float(max_delivery), value=(float(min_delivery), float(max_delivery)))
         df = df[(df["Delivery %"] >= delivery_range[0]) & (df["Delivery %"] <= delivery_range[1])]
