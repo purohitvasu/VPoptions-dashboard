@@ -13,7 +13,10 @@ fo_file = st.sidebar.file_uploader("Upload F&O Bhavcopy (CSV)", type=["csv"])
 # Column Mapping for Cash Market CSV
 cash_column_mapping = {
     "SYMBOL": "Script Name",
-    "LAST_PRICE": "LTP",
+    "OPEN_PRICE": "Open",
+    "HIGH_PRICE": "High",
+    "LOW_PRICE": "Low",
+    "LAST_PRICE": "Close",
     "DELIV_PER": "Delivery %"
 }
 
@@ -51,13 +54,16 @@ def process_cash_market(cash_file):
         cash_df = clean_columns(cash_df, cash_column_mapping)
 
         # Check required columns
-        required_cash_cols = ["Script Name", "LTP", "Delivery %"]
+        required_cash_cols = ["Script Name", "Open", "High", "Low", "Close", "Delivery %"]
         if not all(col in cash_df.columns for col in required_cash_cols):
             st.error(f"⚠️ Cash Market CSV is missing columns: {set(required_cash_cols) - set(cash_df.columns)}")
             return None
 
         # Clean numeric values
-        cash_df = clean_numeric_data(cash_df, ["LTP", "Delivery %"])
+        cash_df = clean_numeric_data(cash_df, ["Open", "High", "Low", "Close", "Delivery %"])
+
+        # Keep only required columns
+        cash_df = cash_df[["Script Name", "Open", "High", "Low", "Close", "Delivery %"]]
 
         return cash_df
 
@@ -153,6 +159,8 @@ if fo_df is not None:
 
     # PCR Filter
     min_pcr, max_pcr = fo_df["PCR"].min(), fo_df["PCR"].max()
+    if min_pcr == max_pcr:
+        min_pcr, max_pcr = 0, 1  # Default range
     pcr_range = st.sidebar.slider("📈 Select PCR Range", min_value=float(min_pcr), max_value=float(max_pcr), value=(float(min_pcr), float(max_pcr)))
     fo_df = fo_df[(fo_df["PCR"] >= pcr_range[0]) & (fo_df["PCR"] <= pcr_range[1])]
 
