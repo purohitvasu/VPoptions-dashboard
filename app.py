@@ -20,7 +20,7 @@ cash_column_mapping = {
 # Column Mapping for F&O Bhavcopy CSV
 fo_column_mapping = {
     "TckrSymb": "Script Name",
-    "OpnIntrst": "Future OI",
+    "OpnIntrst": "Open Interest",
     "ChngInOpnIntrst": "Future OI Change",
     "OptnTp": "Option Type",
     "XpryDt": "Expiry Date",
@@ -67,7 +67,7 @@ def process_files(cash_file, fo_file):
         fo_df = fo_df[fo_df["Instrument Type"].isin(["STF", "IDF"])]
 
         # Check required columns in F&O Bhavcopy Data
-        required_fo_cols = ["Script Name", "Future OI", "Future OI Change", "Expiry Date"]
+        required_fo_cols = ["Script Name", "Open Interest", "Future OI Change", "Expiry Date", "Option Type"]
         missing_cols = [col for col in required_fo_cols if col not in fo_df.columns]
 
         if missing_cols:
@@ -78,14 +78,14 @@ def process_files(cash_file, fo_file):
         fo_df["Expiry Date"] = fo_df["Expiry Date"].astype(str)
 
         # Clean numeric values
-        fo_df = clean_numeric_data(fo_df, ["Future OI", "Future OI Change"])
+        fo_df = clean_numeric_data(fo_df, ["Open Interest", "Future OI Change"])
 
-        # Calculate Total Call OI (sum of CE) and Total Put OI (sum of PE)
-        call_oi = fo_df[fo_df["Option Type"] == "CE"].groupby(["Script Name", "Expiry Date"])["Future OI"].sum().reset_index()
-        put_oi = fo_df[fo_df["Option Type"] == "PE"].groupby(["Script Name", "Expiry Date"])["Future OI"].sum().reset_index()
+        # Correct Calculation of Total Call OI and Total Put OI
+        call_oi = fo_df[fo_df["Option Type"] == "CE"].groupby(["Script Name", "Expiry Date"])["Open Interest"].sum().reset_index()
+        put_oi = fo_df[fo_df["Option Type"] == "PE"].groupby(["Script Name", "Expiry Date"])["Open Interest"].sum().reset_index()
 
-        call_oi.rename(columns={"Future OI": "Total Call OI"}, inplace=True)
-        put_oi.rename(columns={"Future OI": "Total Put OI"}, inplace=True)
+        call_oi.rename(columns={"Open Interest": "Total Call OI"}, inplace=True)
+        put_oi.rename(columns={"Open Interest": "Total Put OI"}, inplace=True)
 
         # Merge F&O Data
         fo_final = fo_df.merge(call_oi, on=["Script Name", "Expiry Date"], how="left").merge(put_oi, on=["Script Name", "Expiry Date"], how="left")
@@ -105,7 +105,7 @@ def process_files(cash_file, fo_file):
         final_df = cash_df.merge(fo_final, on="Script Name", how="inner")
 
         # Select only the required columns including Expiry Date
-        final_df = final_df[["Script Name", "Expiry Date", "LTP", "Delivery %", "Future OI", "Future OI Change", "Total Call OI", "Total Put OI", "PCR"]]
+        final_df = final_df[["Script Name", "Expiry Date", "LTP", "Delivery %", "Future OI Change", "Total Call OI", "Total Put OI", "PCR"]]
 
         return final_df
 
