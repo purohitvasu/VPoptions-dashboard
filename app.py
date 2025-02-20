@@ -18,11 +18,20 @@ def init_db():
             Total_Put_OI REAL,
             PCR REAL,
             CLOSE_PRICE REAL,
-            DELIV_PER REAL
+            DELIV_PER REAL,
+            Sentiment TEXT
         )
     ''')
     conn.commit()
     conn.close()
+
+def classify_sentiment(row):
+    if row["PCR"] < 0.7 and row["Future_OI_Change"] > 0 and row["DELIV_PER"] > 50:
+        return "Bullish"
+    elif row["PCR"] > 1.0 and row["Future_OI_Change"] < 0 and row["DELIV_PER"] < 30:
+        return "Bearish"
+    else:
+        return "Neutral"
 
 def save_to_db(data):
     conn = sqlite3.connect("market_data.db")
@@ -59,6 +68,10 @@ def load_data(fo_file, cash_file):
     
     # Merge Cash Market Data
     final_summary = fo_summary.merge(cash_df, left_on="TckrSymb", right_on="SYMBOL", how="left").drop(columns=["SYMBOL"])
+    
+    # Classify Market Sentiment
+    final_summary["Sentiment"] = final_summary.apply(classify_sentiment, axis=1)
+    
     final_summary = final_summary.round(2)
     
     # Save to Database
@@ -89,12 +102,15 @@ def main():
     # Filters in Sidebar
     with st.sidebar:
         expiry_filter = st.selectbox("Select Expiry Date", ["All"] + list(processed_data["XpryDt"].dropna().unique()))
+        sentiment_filter = st.selectbox("Select Sentiment", ["All"] + list(processed_data["Sentiment"].unique()))
         pcr_filter = st.slider("Select PCR Range", min_value=0.0, max_value=1.5, value=(0.0, 1.5))
         deliv_min, deliv_max = processed_data["DELIV_PER"].dropna().min(), processed_data["DELIV_PER"].dropna().max()
         delivery_filter = st.slider("Select Delivery Percentage Range", min_value=float(deliv_min), max_value=float(deliv_max), value=(max(10.0, deliv_min), min(90.0, deliv_max)))
     
     if expiry_filter != "All":
         processed_data = processed_data[processed_data["XpryDt"] == expiry_filter]
+    if sentiment_filter != "All":
+        processed_data = processed_data[processed_data["Sentiment"] == sentiment_filter]
     processed_data = processed_data[(processed_data["PCR"] >= pcr_filter[0]) & (processed_data["PCR"] <= pcr_filter[1])]
     processed_data = processed_data[(processed_data["DELIV_PER"] >= delivery_filter[0]) & (processed_data["DELIV_PER"] <= delivery_filter[1])]
     
