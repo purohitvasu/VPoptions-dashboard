@@ -44,18 +44,14 @@ def main():
     
     if fo_file and cash_file:
         processed_data = load_data(fo_file, cash_file)
-        st.dataframe(processed_data)
         
         # Filters
-        stock_filter = st.selectbox("Select Stock", ["All"] + list(processed_data["TckrSymb"].dropna().unique()))
         expiry_filter = st.selectbox("Select Expiry Date", ["All"] + list(processed_data["XpryDt"].dropna().unique()))
         pcr_min, pcr_max = processed_data["PCR"].dropna().min(), processed_data["PCR"].dropna().max()
         pcr_filter = st.slider("Select PCR Range", min_value=float(pcr_min), max_value=float(pcr_max), value=(max(0.0, pcr_min), min(1.5, pcr_max)))
         deliv_min, deliv_max = processed_data["DELIV_PER"].dropna().min(), processed_data["DELIV_PER"].dropna().max()
         delivery_filter = st.slider("Select Delivery Percentage Range", min_value=float(deliv_min), max_value=float(deliv_max), value=(max(10.0, deliv_min), min(90.0, deliv_max)))
         
-        if stock_filter != "All":
-            processed_data = processed_data[processed_data["TckrSymb"] == stock_filter]
         if expiry_filter != "All":
             processed_data = processed_data[processed_data["XpryDt"] == expiry_filter]
         processed_data = processed_data[(processed_data["PCR"] >= pcr_filter[0]) & (processed_data["PCR"] <= pcr_filter[1])]
