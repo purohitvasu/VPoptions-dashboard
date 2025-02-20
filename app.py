@@ -5,8 +5,8 @@ def load_data(fo_file, cash_file):
     # Load F&O Bhavcopy
     fo_df = pd.read_csv(fo_file)
     
-    # Process Futures Data
-    futures_data = fo_df[fo_df["FinInstrmTp"] == "FUTSTK"].groupby(["TckrSymb", "XpryDt"]).agg(
+    # Process Futures Data (Including STF - Stock Futures)
+    futures_data = fo_df[fo_df["FinInstrmTp"] == "STF"].groupby(["TckrSymb", "XpryDt"]).agg(
         Future_OI=("OpnIntrst", "sum"),
         Future_OI_Change=("ChngInOpnIntrst", "sum")
     ).reset_index()
@@ -47,11 +47,17 @@ def main():
         # Filters
         stock_filter = st.selectbox("Select Stock", ["All"] + list(processed_data["TckrSymb"].unique()))
         expiry_filter = st.selectbox("Select Expiry Date", ["All"] + list(processed_data["XpryDt"].unique()))
+        pcr_filter = st.slider("Select PCR Range", min_value=float(processed_data["PCR"].min()), 
+                               max_value=float(processed_data["PCR"].max()), value=(0.5, 1.5))
+        delivery_filter = st.slider("Select Delivery Percentage Range", min_value=float(processed_data["DELIV_PER"].min()), 
+                                    max_value=float(processed_data["DELIV_PER"].max()), value=(10.0, 90.0))
         
         if stock_filter != "All":
             processed_data = processed_data[processed_data["TckrSymb"] == stock_filter]
         if expiry_filter != "All":
             processed_data = processed_data[processed_data["XpryDt"] == expiry_filter]
+        processed_data = processed_data[(processed_data["PCR"] >= pcr_filter[0]) & (processed_data["PCR"] <= pcr_filter[1])]
+        processed_data = processed_data[(processed_data["DELIV_PER"] >= delivery_filter[0]) & (processed_data["DELIV_PER"] <= delivery_filter[1])]
         
         st.dataframe(processed_data)
 
