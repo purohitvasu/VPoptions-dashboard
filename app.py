@@ -61,7 +61,7 @@ def process_files(cash_file, fo_file):
         cash_df = clean_numeric_data(cash_df, ["LTP", "Delivery %"])
 
         # Load F&O Bhavcopy Data
-        fo_df = pd.read_csv(fo_file)
+        fo_df = pd.read_csv(fo_file)  # Read the uploaded file into a DataFrame
         fo_df = clean_columns(fo_df, fo_column_mapping)
 
         # Filter only Stock Futures (STF) and Index Futures (IDF)
@@ -99,8 +99,6 @@ def process_files(cash_file, fo_file):
         final_df = cash_df.merge(fo_final, on="Script Name", how="inner")
 
         # Drop Expiry Date from display, keep for filtering
-        final_df.drop(columns=["Expiry Date"], inplace=True, errors="ignore")
-
         return final_df, expiry_dates  # Return dataset + expiry dates for filtering
 
     except Exception as e:
@@ -120,7 +118,7 @@ if cash_file and fo_file:
         if expiry_dates is not None and len(expiry_dates) > 0:
             selected_expiry = st.sidebar.selectbox("📅 Select Expiry Date", ["All"] + list(expiry_dates))
             if selected_expiry != "All":
-                df = df[df["Script Name"].isin(fo_file[fo_file["Expiry Date"] == selected_expiry]["Script Name"])]
+                df = df[df["Script Name"].isin(fo_file["Script Name"][fo_file["Expiry Date"] == selected_expiry])]
 
         # PCR Filter (Handling NaN & sorting issue)
         min_pcr, max_pcr = df["PCR"].min(), df["PCR"].max()
