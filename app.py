@@ -95,7 +95,7 @@ def process_fo_bhavcopy(fo_file):
         # Clean numeric values
         fo_df = clean_numeric_data(fo_df, ["Open Interest", "Future OI Change"])
 
-        # **Calculate Total Call OI (sum of OpnIntrst for CE) and Total Put OI (sum of OpnIntrst for PE)**
+        # **Calculate Total Call OI and Total Put OI for each Script Name and Expiry Date**
         call_oi = fo_df[fo_df["Option Type"] == "CE"].groupby(["Script Name", "Expiry Date"])["Open Interest"].sum().reset_index()
         put_oi = fo_df[fo_df["Option Type"] == "PE"].groupby(["Script Name", "Expiry Date"])["Open Interest"].sum().reset_index()
 
