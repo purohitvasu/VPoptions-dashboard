@@ -78,8 +78,8 @@ def process_fo_bhavcopy(fo_file):
         fo_df = pd.read_csv(fo_file)
         fo_df = clean_columns(fo_df, fo_column_mapping)
 
-        # Filter only Stock Futures (STF) and Index Futures (IDF)
-        fo_df = fo_df[fo_df["Instrument Type"].isin(["STF", "IDF"])]
+        # Filter Stock Futures (STF), Index Futures (IDF), and **Stock Options (STO)**
+        fo_df = fo_df[fo_df["Instrument Type"].isin(["STF", "IDF", "STO"])]
 
         # Check required columns
         required_fo_cols = ["Script Name", "Open Interest", "Future OI Change", "Expiry Date", "Option Type"]
@@ -95,7 +95,7 @@ def process_fo_bhavcopy(fo_file):
         # Clean numeric values
         fo_df = clean_numeric_data(fo_df, ["Open Interest", "Future OI Change"])
 
-        # Calculate Total Call OI (sum of CE) and Total Put OI (sum of PE)
+        # **Include STO in Total Call OI and Total Put OI calculations**
         call_oi = fo_df[fo_df["Option Type"] == "CE"].groupby(["Script Name", "Expiry Date"])["Open Interest"].sum().reset_index()
         put_oi = fo_df[fo_df["Option Type"] == "PE"].groupby(["Script Name", "Expiry Date"])["Open Interest"].sum().reset_index()
 
