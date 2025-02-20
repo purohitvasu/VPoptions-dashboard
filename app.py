@@ -67,11 +67,11 @@ def process_files(cash_file, fo_file):
         # Debugging: Print actual column names
         st.write("✅ **Columns in uploaded F&O CSV:**", list(fo_df.columns))
 
-        # Filter only Stock Futures (STF) data
-        fo_df = fo_df[fo_df["Instrument Type"] == "STF"]
+        # Filter only Stock Futures (STF) and Index Futures (IDF)
+        fo_df = fo_df[fo_df["Instrument Type"].isin(["STF", "IDF"])]
 
         # Check required columns in F&O Bhavcopy Data
-        required_fo_cols = ["Script Name", "Future OI", "Future OI Change"]
+        required_fo_cols = ["Script Name", "Future OI", "Future OI Change", "Expiry Date"]
         missing_cols = [col for col in required_fo_cols if col not in fo_df.columns]
 
         if missing_cols:
@@ -92,11 +92,11 @@ def process_files(cash_file, fo_file):
         fo_final = fo_df.merge(call_oi, on="Script Name", how="left").merge(put_oi, on="Script Name", how="left")
         fo_final["PCR"] = (fo_final["Total Put OI"] / fo_final["Total Call OI"]).round(2)
 
-        # Merge with Cash Market Data
-        final_df = cash_df.merge(fo_final, on="Script Name", how="left")
+        # Merge with Cash Market Data (only matching stocks & indices)
+        final_df = cash_df.merge(fo_final, on="Script Name", how="inner")
 
         # Select only the required columns
-        final_df = final_df[["Script Name", "LTP", "Delivery %", "Future OI", "Future OI Change", "Total Call OI", "Total Put OI", "PCR"]]
+        final_df = final_df[["Script Name", "LTP", "Delivery %", "Future OI", "Future OI Change", "Total Call OI", "Total Put OI", "PCR", "Expiry Date"]]
 
         return final_df
 
@@ -110,8 +110,27 @@ if cash_file and fo_file:
     if df is not None:
         st.success("✅ Files uploaded & processed successfully!")
         
+        # Sidebar Filters
+        st.sidebar.header("🔍 Filters")
+        
+        # Expiry Date Filter
+        expiry_dates = df["Expiry Date"].dropna().unique()
+        selected_expiry = st.sidebar.selectbox("📅 Select Expiry Date", ["All"] + list(expiry_dates))
+        if selected_expiry != "All":
+            df = df[df["Expiry Date"] == selected_expiry]
+
+        # PCR Filter
+        min_pcr, max_pcr = float(df["PCR"].min()), float(df["PCR"].max())
+        pcr_range = st.sidebar.slider("📈 Select PCR Range", min_value=min_pcr, max_value=max_pcr, value=(min_pcr, max_pcr))
+        df = df[(df["PCR"] >= pcr_range[0]) & (df["PCR"] <= pcr_range[1])]
+
+        # Delivery Percentage Filter
+        min_delivery, max_delivery = float(df["Delivery %"].min()), float(df["Delivery %"].max())
+        delivery_range = st.sidebar.slider("📊 Select Delivery % Range", min_value=min_delivery, max_value=max_delivery, value=(min_delivery, max_delivery))
+        df = df[(df["Delivery %"] >= delivery_range[0]) & (df["Delivery %"] <= delivery_range[1])]
+
         # Display merged data
-        st.subheader("📊 Processed Data")
+        st.subheader("📊 Processed Data (Filtered)")
         st.dataframe(df)
 
         # Allow user to download the processed dataset
