@@ -55,7 +55,7 @@ def process_files(cash_file, fo_file):
         if not all(col in cash_df.columns for col in required_cash_cols):
             st.error(f"⚠️ Cash Market CSV is missing columns: {set(required_cash_cols) - set(cash_df.columns)}")
             st.write("🔍 **Columns found in uploaded file:**", list(cash_df.columns))
-            return None, None
+            return None
 
         # Clean numeric values
         cash_df = clean_numeric_data(cash_df, ["LTP", "Delivery %"])
@@ -73,41 +73,40 @@ def process_files(cash_file, fo_file):
 
         if missing_cols:
             st.error(f"⚠️ **F&O CSV is missing columns:** {missing_cols}")
-            return None, None
+            return None
 
         # Ensure 'Expiry Date' is of string type
         fo_df["Expiry Date"] = fo_df["Expiry Date"].astype(str)
-
-        # Extract unique expiry dates before processing
-        expiry_dates = fo_df["Expiry Date"].dropna().unique()
 
         # Clean numeric values
         fo_df = clean_numeric_data(fo_df, ["Future OI", "Future OI Change"])
 
         # Calculate Total Call OI and Total Put OI for each instrument
-        call_oi = fo_df[fo_df["Option Type"] == "CE"].groupby("Script Name")["Future OI"].sum().reset_index()
-        put_oi = fo_df[fo_df["Option Type"] == "PE"].groupby("Script Name")["Future OI"].sum().reset_index()
+        call_oi = fo_df[fo_df["Option Type"] == "CE"].groupby(["Script Name", "Expiry Date"])["Future OI"].sum().reset_index()
+        put_oi = fo_df[fo_df["Option Type"] == "PE"].groupby(["Script Name", "Expiry Date"])["Future OI"].sum().reset_index()
 
         call_oi.rename(columns={"Future OI": "Total Call OI"}, inplace=True)
         put_oi.rename(columns={"Future OI": "Total Put OI"}, inplace=True)
 
         # Merge F&O Data
-        fo_final = fo_df.merge(call_oi, on="Script Name", how="left").merge(put_oi, on="Script Name", how="left")
+        fo_final = fo_df.merge(call_oi, on=["Script Name", "Expiry Date"], how="left").merge(put_oi, on=["Script Name", "Expiry Date"], how="left")
         fo_final["PCR"] = (fo_final["Total Put OI"] / fo_final["Total Call OI"]).fillna(0).round(2)  # Handle NaN
 
         # Merge with Cash Market Data (only matching stocks & indices)
         final_df = cash_df.merge(fo_final, on="Script Name", how="inner")
 
-        # Drop Expiry Date from display, keep for filtering
-        return final_df, expiry_dates  # Return dataset + expiry dates for filtering
+        # Select only the required columns including Expiry Date
+        final_df = final_df[["Script Name", "Expiry Date", "LTP", "Delivery %", "Future OI", "Future OI Change", "Total Call OI", "Total Put OI", "PCR"]]
+
+        return final_df
 
     except Exception as e:
         st.error(f"❌ Error processing files: {str(e)}")
-        return None, None
+        return None
 
 # Process files after upload
 if cash_file and fo_file:
-    df, expiry_dates = process_files(cash_file, fo_file)
+    df = process_files(cash_file, fo_file)
     if df is not None:
         st.success("✅ Files uploaded & processed successfully!")
         
@@ -115,10 +114,10 @@ if cash_file and fo_file:
         st.sidebar.header("🔍 Filters")
         
         # Expiry Date Filter
-        if expiry_dates is not None and len(expiry_dates) > 0:
-            selected_expiry = st.sidebar.selectbox("📅 Select Expiry Date", ["All"] + list(expiry_dates))
-            if selected_expiry != "All":
-                df = df[df["Script Name"].isin(fo_file["Script Name"][fo_file["Expiry Date"] == selected_expiry])]
+        expiry_dates = df["Expiry Date"].dropna().unique()
+        selected_expiry = st.sidebar.selectbox("📅 Select Expiry Date", ["All"] + list(expiry_dates))
+        if selected_expiry != "All":
+            df = df[df["Expiry Date"] == selected_expiry]
 
         # PCR Filter (Handling NaN & sorting issue)
         min_pcr, max_pcr = df["PCR"].min(), df["PCR"].max()
