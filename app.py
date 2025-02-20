@@ -54,14 +54,13 @@ def process_files(cash_file, fo_file):
         required_cash_cols = ["Script Name", "LTP", "Delivery %"]
         if not all(col in cash_df.columns for col in required_cash_cols):
             st.error(f"⚠️ Cash Market CSV is missing columns: {set(required_cash_cols) - set(cash_df.columns)}")
-            st.write("🔍 **Columns found in uploaded file:**", list(cash_df.columns))
             return None
 
         # Clean numeric values
         cash_df = clean_numeric_data(cash_df, ["LTP", "Delivery %"])
 
         # Load F&O Bhavcopy Data
-        fo_df = pd.read_csv(fo_file)  # Read the uploaded file into a DataFrame
+        fo_df = pd.read_csv(fo_file)
         fo_df = clean_columns(fo_df, fo_column_mapping)
 
         # Filter only Stock Futures (STF) and Index Futures (IDF)
@@ -102,7 +101,7 @@ def process_files(cash_file, fo_file):
             0
         )
 
-        # Merge with Cash Market Data (only matching stocks & indices)
+        # Merge with Cash Market Data
         final_df = cash_df.merge(fo_final, on="Script Name", how="inner")
 
         # Select only the required columns including Expiry Date
@@ -119,23 +118,29 @@ if cash_file and fo_file:
     df = process_files(cash_file, fo_file)
     if df is not None:
         st.success("✅ Files uploaded & processed successfully!")
-        
+
         # Sidebar Filters
         st.sidebar.header("🔍 Filters")
-        
+
         # Expiry Date Filter
         expiry_dates = df["Expiry Date"].dropna().unique()
         selected_expiry = st.sidebar.selectbox("📅 Select Expiry Date", ["All"] + list(expiry_dates))
         if selected_expiry != "All":
             df = df[df["Expiry Date"] == selected_expiry]
 
-        # PCR Filter
+        # PCR Filter (Avoid slider error)
         min_pcr, max_pcr = df["PCR"].min(), df["PCR"].max()
+        if min_pcr == max_pcr:
+            min_pcr, max_pcr = 0, 1  # Default range
+        
         pcr_range = st.sidebar.slider("📈 Select PCR Range", min_value=float(min_pcr), max_value=float(max_pcr), value=(float(min_pcr), float(max_pcr)))
         df = df[(df["PCR"] >= pcr_range[0]) & (df["PCR"] <= pcr_range[1])]
 
-        # Delivery Percentage Filter
+        # Delivery Percentage Filter (Avoid slider error)
         min_delivery, max_delivery = df["Delivery %"].min(), df["Delivery %"].max()
+        if min_delivery == max_delivery:
+            min_delivery, max_delivery = 0, 100  # Default range
+        
         delivery_range = st.sidebar.slider("📊 Select Delivery % Range", min_value=float(min_delivery), max_value=float(max_delivery), value=(float(min_delivery), float(max_delivery)))
         df = df[(df["Delivery %"] >= delivery_range[0]) & (df["Delivery %"] <= delivery_range[1])]
 
