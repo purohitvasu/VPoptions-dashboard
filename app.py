@@ -1,65 +1,56 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
+import os
 
-def load_data(fo_file, cash_file):
-    # Load F&O Bhavcopy
-    fo_df = pd.read_csv(fo_file)
-    
-    # Process Futures Data (Including STF - Stock Futures)
-    futures_data = fo_df[fo_df["FinInstrmTp"] == "STF"].groupby(["TckrSymb", "XpryDt"]).agg(
-        Future_OI=("OpnIntrst", "sum"),
-        Future_OI_Change=("ChngInOpnIntrst", "sum")
-    ).reset_index()
-    
-    # Process Options Data (Aggregate Call & Put OI)
-    options_data = fo_df[fo_df["FinInstrmTp"] == "STO"].groupby(["TckrSymb", "XpryDt", "OptnTp"]) \
-        ["OpnIntrst"].sum().unstack().fillna(0)
-    options_data = options_data.rename(columns={"CE": "Total_Call_OI", "PE": "Total_Put_OI"})
-    options_data["PCR"] = options_data["Total_Put_OI"] / options_data["Total_Call_OI"]
-    options_data["PCR"] = options_data["PCR"].replace([np.inf, -np.inf], np.nan).fillna(0)
-    options_data = options_data.reset_index()
-    
-    # Merge Futures & Options Data
-    fo_summary = futures_data.merge(options_data, on=["TckrSymb", "XpryDt"], how="outer")
-    
-    # Load Cash Market Bhavcopy
-    cash_df = pd.read_csv(cash_file)
-    cash_df = cash_df.rename(columns=lambda x: x.strip())
-    cash_df = cash_df[["SYMBOL", "CLOSE_PRICE", "DELIV_PER"]]
-    cash_df = cash_df[cash_df["DELIV_PER"] != "-"]
-    cash_df["DELIV_PER"] = pd.to_numeric(cash_df["DELIV_PER"], errors="coerce")
-    
-    # Merge Cash Market Data
-    final_summary = fo_summary.merge(cash_df, left_on="TckrSymb", right_on="SYMBOL", how="left").drop(columns=["SYMBOL"])
-    final_summary = final_summary.round(2)
-    
-    return final_summary
+# Define storage file for maintaining the rolling dataset
+DATA_FILE = "historical_data.csv"
 
-def main():
-    st.title("NSE F&O and Cash Market Data Analysis")
-    
-    with st.sidebar:
-        fo_file = st.file_uploader("Upload F&O Bhavcopy CSV", type=["csv"])
-        cash_file = st.file_uploader("Upload Cash Market Bhavcopy CSV", type=["csv"])
-    
-    if fo_file and cash_file:
-        processed_data = load_data(fo_file, cash_file)
-        
-        # Filters in Sidebar
-        with st.sidebar:
-            expiry_filter = st.selectbox("Select Expiry Date", ["All"] + list(processed_data["XpryDt"].dropna().unique()))
-            pcr_filter = st.slider("Select PCR Range", min_value=0.0, max_value=1.5, value=(0.0, 1.5))
-            deliv_min, deliv_max = processed_data["DELIV_PER"].dropna().min(), processed_data["DELIV_PER"].dropna().max()
-            delivery_filter = st.slider("Select Delivery Percentage Range", min_value=float(deliv_min), max_value=float(deliv_max), value=(max(10.0, deliv_min), min(90.0, deliv_max)))
-        
-        if expiry_filter != "All":
-            processed_data = processed_data[processed_data["XpryDt"] == expiry_filter]
-        processed_data = processed_data[(processed_data["PCR"] >= pcr_filter[0]) & (processed_data["PCR"] <= pcr_filter[1])]
-        processed_data = processed_data[(processed_data["DELIV_PER"] >= delivery_filter[0]) & (processed_data["DELIV_PER"] <= delivery_filter[1])]
-        
-        # Display table only
-        st.dataframe(processed_data)
+# Load hardcoded initial 13 days of data (Replace with your actual dataset)
+def load_initial_data():
+    data = pd.DataFrame({
+        "Date": pd.date_range(start="2024-02-01", periods=13, freq='D'),
+        "TckrSymb": ["STOCK1", "STOCK2", "STOCK3"] * 13,
+        "LTP": [100 + i for i in range(39)],
+        "Delivery_Percentage": [30 + (i % 5) for i in range(39)],
+        "Future_OI": [5000 + i*10 for i in range(39)],
+        "Future_OI_Change": [50 + i for i in range(39)],
+        "Total_Call_OI": [2000 + i*5 for i in range(39)],
+        "Total_Put_OI": [2500 + i*7 for i in range(39)],
+    })
+    data["PCR"] = data["Total_Put_OI"] / data["Total_Call_OI"]
+    return data
 
-if __name__ == "__main__":
-    main()
+# Load or initialize data
+def load_data():
+    if os.path.exists(DATA_FILE):
+        return pd.read_csv(DATA_FILE, parse_dates=["Date"])
+    else:
+        initial_data = load_initial_data()
+        initial_data.to_csv(DATA_FILE, index=False)
+        return initial_data
+
+# Store new data while maintaining a rolling 15-day limit
+def update_data(new_data):
+    existing_data = load_data()
+    combined_data = pd.concat([existing_data, new_data]).drop_duplicates()
+    combined_data = combined_data.sort_values(by="Date", ascending=False).head(15)  # Keep last 15 days
+    combined_data.to_csv(DATA_FILE, index=False)
+    return combined_data
+
+# Streamlit UI
+st.title("NSE F&O and Cash Market Analysis")
+
+data = load_data()
+
+# Date selection filter
+date_selection = st.selectbox("Select Date", sorted(data["Date"].unique(), reverse=True))
+filtered_data = data[data["Date"] == date_selection]
+st.dataframe(filtered_data)
+
+# File uploader for daily data updates
+uploaded_file = st.file_uploader("Upload daily data CSV", type=["csv"])
+if uploaded_file:
+    new_data = pd.read_csv(uploaded_file, parse_dates=["Date"])
+    data = update_data(new_data)
+    st.success("Data updated successfully!")
+    st.experimental_rerun()
