@@ -13,7 +13,7 @@ def load_initial_data():
     for date in dates:
         for ticker in tickers:
             data.append({
-                "Date": date,
+                "Date": date.strftime("%Y-%m-%d"),
                 "TckrSymb": ticker,
                 "LTP": 100 + len(data),
                 "Delivery_Percentage": 30 + (len(data) % 5),
@@ -24,6 +24,7 @@ def load_initial_data():
             })
     df = pd.DataFrame(data)
     df["PCR"] = df["Total_Put_OI"] / df["Total_Call_OI"]
+    df["Date"] = pd.to_datetime(df["Date"])  # Ensure Date column is datetime
     return df
 
 # Load or initialize data
@@ -38,6 +39,7 @@ def load_data():
 # Store new data while maintaining a rolling 15-day limit
 def update_data(new_data):
     existing_data = load_data()
+    new_data["Date"] = pd.to_datetime(new_data["Date"])  # Ensure new data Date column is datetime
     combined_data = pd.concat([existing_data, new_data]).drop_duplicates()
     combined_data = combined_data.sort_values(by="Date", ascending=False).head(15)  # Keep last 15 days
     combined_data.to_csv(DATA_FILE, index=False)
@@ -49,14 +51,18 @@ st.title("NSE F&O and Cash Market Analysis")
 data = load_data()
 
 # Date selection filter
-date_selection = st.selectbox("Select Date", sorted(data["Date"].unique(), reverse=True))
+date_selection = st.selectbox("Select Date", sorted(data["Date"].dropna().unique(), reverse=True))
 filtered_data = data[data["Date"] == date_selection]
 st.dataframe(filtered_data)
 
 # File uploader for daily data updates
 uploaded_file = st.file_uploader("Upload daily data CSV", type=["csv"])
 if uploaded_file:
-    new_data = pd.read_csv(uploaded_file, parse_dates=["Date"])
-    data = update_data(new_data)
-    st.success("Data updated successfully!")
-    st.experimental_rerun()
+    new_data = pd.read_csv(uploaded_file)
+    if "Date" in new_data.columns:
+        new_data["Date"] = pd.to_datetime(new_data["Date"])  # Ensure Date column is datetime
+        data = update_data(new_data)
+        st.success("Data updated successfully!")
+        st.experimental_rerun()
+    else:
+        st.error("Uploaded file is missing the 'Date' column.")
