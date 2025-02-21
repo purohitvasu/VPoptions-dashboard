@@ -7,18 +7,24 @@ DATA_FILE = "historical_data.csv"
 
 # Load hardcoded initial 13 days of data (Replace with your actual dataset)
 def load_initial_data():
-    data = pd.DataFrame({
-        "Date": pd.date_range(start="2024-02-01", periods=13, freq='D'),
-        "TckrSymb": ["STOCK1", "STOCK2", "STOCK3"] * 13,
-        "LTP": [100 + i for i in range(39)],
-        "Delivery_Percentage": [30 + (i % 5) for i in range(39)],
-        "Future_OI": [5000 + i*10 for i in range(39)],
-        "Future_OI_Change": [50 + i for i in range(39)],
-        "Total_Call_OI": [2000 + i*5 for i in range(39)],
-        "Total_Put_OI": [2500 + i*7 for i in range(39)],
-    })
-    data["PCR"] = data["Total_Put_OI"] / data["Total_Call_OI"]
-    return data
+    dates = pd.date_range(start="2024-02-01", periods=13, freq='D')
+    tickers = ["STOCK1", "STOCK2", "STOCK3"]
+    data = []
+    for date in dates:
+        for ticker in tickers:
+            data.append({
+                "Date": date,
+                "TckrSymb": ticker,
+                "LTP": 100 + len(data),
+                "Delivery_Percentage": 30 + (len(data) % 5),
+                "Future_OI": 5000 + len(data) * 10,
+                "Future_OI_Change": 50 + len(data),
+                "Total_Call_OI": 2000 + len(data) * 5,
+                "Total_Put_OI": 2500 + len(data) * 7,
+            })
+    df = pd.DataFrame(data)
+    df["PCR"] = df["Total_Put_OI"] / df["Total_Call_OI"]
+    return df
 
 # Load or initialize data
 def load_data():
