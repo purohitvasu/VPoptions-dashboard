@@ -101,20 +101,17 @@ def main():
     
     # Filters in Sidebar
     with st.sidebar:
-        stock_filter = st.selectbox("Select Stock Symbol", ["All"] + list(processed_data["TckrSymb"].dropna().unique()))
         expiry_filter = st.selectbox("Select Expiry Date", ["All"] + list(processed_data["XpryDt"].dropna().unique()))
         pcr_filter = st.slider("Select PCR Range", min_value=0.0, max_value=1.5, value=(0.0, 1.5))
         deliv_min, deliv_max = processed_data["DELIV_PER"].dropna().min(), processed_data["DELIV_PER"].dropna().max()
         delivery_filter = st.slider("Select Delivery Percentage Range", min_value=float(deliv_min), max_value=float(deliv_max), value=(max(10.0, deliv_min), min(90.0, deliv_max)))
     
-    if stock_filter != "All":
-        processed_data = processed_data[processed_data["TckrSymb"] == stock_filter]
     if expiry_filter != "All":
         processed_data = processed_data[processed_data["XpryDt"] == expiry_filter]
     processed_data = processed_data[(processed_data["PCR"] >= pcr_filter[0]) & (processed_data["PCR"] <= pcr_filter[1])]
     processed_data = processed_data[(processed_data["DELIV_PER"] >= delivery_filter[0]) & (processed_data["DELIV_PER"] <= delivery_filter[1])]
     
-    # Display filtered data
+    # Display filtered data with Stock Symbol column
     st.dataframe(processed_data)
 
 if __name__ == "__main__":
