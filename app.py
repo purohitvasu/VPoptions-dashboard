@@ -12,6 +12,7 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS market_data (
             TckrSymb TEXT,
+            TradDt TEXT,
             XpryDt TEXT,
             Future_OI REAL,
             Future_OI_Change REAL,
@@ -19,7 +20,8 @@ def init_db():
             Total_Put_OI REAL,
             PCR REAL,
             CLOSE_PRICE REAL,
-            DELIV_PER REAL
+            DELIV_PER REAL,
+            DATE1 TEXT
         )
     ''')
     conn.commit()
@@ -45,13 +47,13 @@ def load_data(fo_files, cash_files):
     fo_df = process_multiple_files(fo_files)
     
     # Process Futures Data (Including STF - Stock Futures)
-    futures_data = fo_df[fo_df["FinInstrmTp"] == "STF"].groupby(["TckrSymb", "XpryDt"]).agg(
+    futures_data = fo_df[fo_df["FinInstrmTp"] == "STF"].groupby(["TckrSymb", "TradDt", "XpryDt"]).agg(
         Future_OI=("OpnIntrst", "sum"),
         Future_OI_Change=("ChngInOpnIntrst", "sum")
     ).reset_index()
     
     # Process Options Data (Aggregate Call & Put OI)
-    options_data = fo_df[fo_df["FinInstrmTp"] == "STO"].groupby(["TckrSymb", "XpryDt", "OptnTp"]) \
+    options_data = fo_df[fo_df["FinInstrmTp"] == "STO"].groupby(["TckrSymb", "TradDt", "XpryDt", "OptnTp"]) \
         ["OpnIntrst"].sum().unstack().fillna(0)
     options_data = options_data.rename(columns={"CE": "Total_Call_OI", "PE": "Total_Put_OI"})
     options_data["PCR"] = options_data["Total_Put_OI"] / options_data["Total_Call_OI"]
@@ -59,17 +61,17 @@ def load_data(fo_files, cash_files):
     options_data = options_data.reset_index()
     
     # Merge Futures & Options Data
-    fo_summary = futures_data.merge(options_data, on=["TckrSymb", "XpryDt"], how="outer")
+    fo_summary = futures_data.merge(options_data, on=["TckrSymb", "TradDt", "XpryDt"], how="outer")
     
     # Process Multiple Cash Market Bhavcopy Files
     cash_df = process_multiple_files(cash_files)
     cash_df = cash_df.rename(columns=lambda x: x.strip())
-    cash_df = cash_df[["SYMBOL", "CLOSE_PRICE", "DELIV_PER"]]
+    cash_df = cash_df[["SYMBOL", "DATE1", "CLOSE_PRICE", "DELIV_PER"]]
     cash_df = cash_df[cash_df["DELIV_PER"] != "-"]
     cash_df["DELIV_PER"] = pd.to_numeric(cash_df["DELIV_PER"], errors="coerce")
     
     # Merge Cash Market Data
-    final_summary = fo_summary.merge(cash_df, left_on="TckrSymb", right_on="SYMBOL", how="left").drop(columns=["SYMBOL"])
+    final_summary = fo_summary.merge(cash_df, left_on=["TckrSymb", "TradDt"], right_on=["SYMBOL", "DATE1"], how="left").drop(columns=["SYMBOL"])
     final_summary = final_summary.round(2)
     
     # Save to Database
