@@ -12,8 +12,8 @@ uploaded_cash_file = st.sidebar.file_uploader("Upload Cash Market Bhavcopy (CSV)
 uploaded_fo_file = st.sidebar.file_uploader("Upload F&O Bhavcopy (CSV)", type=["csv"])
 
 # **Latest Available File IDs (Manually Update)**
-cash_market_file_id = "YOUR_CASH_MARKET_FILE_ID"
-fo_bhavcopy_file_id = "YOUR_FO_BHAVCOPY_FILE_ID"
+cash_market_file_id = "1-93x9MZw2SGRcxRcZ6jQqxiivdlHi_LK"
+fo_bhavcopy_file_id = "1-CBLBJMuFByy1_8bUdsOV-QfBZfl4dII"
 
 # 🚀 Step 2: Load Latest Bhavcopy Files
 def load_csv_from_drive(file_id):
