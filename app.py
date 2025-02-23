@@ -39,11 +39,22 @@ def load_data(fo_df, cash_df):
     # Merge Futures & Options Data
     fo_summary = futures_data.merge(options_data, on=["TckrSymb", "XpryDt"], how="outer")
 
+    # Print actual Cash Market Bhavcopy column names
+    st.write("🔍 Cash Market Data Columns:", list(cash_df.columns))
+
+    # Automatically Find Correct Column Names
+    close_col = next((col for col in cash_df.columns if "CLOSE" in col.upper()), None)
+    deliv_col = next((col for col in cash_df.columns if "DELIV" in col.upper()), None)
+
+    if not close_col or not deliv_col:
+        st.error("❌ Required columns for Close Price & Delivery % not found!")
+        return pd.DataFrame()
+
     # Process Cash Market Data
     cash_df = cash_df.rename(columns=lambda x: x.strip())
-    cash_df = cash_df[["SYMBOL", "CLOSE_PRICE", "DELIV_PER"]]
-    cash_df = cash_df[cash_df["DELIV_PER"] != "-"]
-    cash_df["DELIV_PER"] = pd.to_numeric(cash_df["DELIV_PER"], errors="coerce")
+    cash_df = cash_df[["SYMBOL", close_col, deliv_col]]
+    cash_df = cash_df[cash_df[deliv_col] != "-"]
+    cash_df[deliv_col] = pd.to_numeric(cash_df[deliv_col], errors="coerce")
 
     # Merge F&O + Cash Market Data
     final_summary = fo_summary.merge(cash_df, left_on="TckrSymb", right_on="SYMBOL", how="left").drop(columns=["SYMBOL"])
@@ -71,6 +82,10 @@ def main():
 
     processed_data = load_data(fo_df, cash_df)
 
+    if processed_data.empty:
+        st.warning("⚠️ No data available after processing. Check Bhavcopy files.")
+        return
+
     # Filters in Sidebar
     with st.sidebar:
         expiry_filter = st.selectbox("Select Expiry Date", ["All"] + list(processed_data["XpryDt"].dropna().unique()))
@@ -90,11 +105,9 @@ def main():
 
     # 🚀 Step 4: PCR Trend Chart
     st.subheader("📈 PCR Trends Over Last 13 Days")
-    # Generate Dummy Historical PCR Data for Now
     hist_pcr_df = processed_data[["TckrSymb", "PCR"]].copy()
     hist_pcr_df["Day"] = np.random.choice(range(-13, 0), len(hist_pcr_df))
     
-    # Plot PCR Trend
     pivot_pcr = hist_pcr_df.pivot(index="Day", columns="TckrSymb", values="PCR")
     fig, ax = plt.subplots(figsize=(10, 5))
     pivot_pcr.plot(kind="line", ax=ax, marker="o")
