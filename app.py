@@ -2,59 +2,55 @@ import streamlit as st
 import pandas as pd
 import os
 import datetime
-from google.colab import drive
 
-# 🚀 Step 1: Mount Google Drive
-st.write("📂 Mounting Google Drive...")
-drive.mount('/content/drive')
+# 🚀 Step 1: Define Google Drive Path
+gdrive_base_url = "https://drive.google.com/uc?id="
 
-# Define Paths
-nse_drive_path = "/content/drive/MyDrive/NSE_Data/"
-cash_market_path = os.path.join(nse_drive_path, "Cash_Market")
-fo_bhavcopy_path = os.path.join(nse_drive_path, "F&O_Bhavcopy")
+# **Manual File Upload as a Backup Option**
+st.sidebar.header("📤 Upload New Bhavcopy")
+uploaded_cash_file = st.sidebar.file_uploader("Upload Cash Market Bhavcopy (CSV)", type=["csv"])
+uploaded_fo_file = st.sidebar.file_uploader("Upload F&O Bhavcopy (CSV)", type=["csv"])
 
-# Ensure directories exist before accessing them
-if not os.path.exists(cash_market_path):
-    st.error(f"❌ Cash Market directory not found: {cash_market_path}")
-    st.stop()
+# **Latest Available File IDs (Manually Update)**
+cash_market_file_id = "YOUR_CASH_MARKET_FILE_ID"
+fo_bhavcopy_file_id = "YOUR_FO_BHAVCOPY_FILE_ID"
 
-if not os.path.exists(fo_bhavcopy_path):
-    st.error(f"❌ F&O Bhavcopy directory not found: {fo_bhavcopy_path}")
-    st.stop()
-
-# Function to Get the Latest File
-def get_latest_file(directory, prefix):
-    files = [f for f in os.listdir(directory) if f.startswith(prefix) and f.endswith(".csv")]
-    if files:
-        latest_file = max(files, key=lambda x: os.path.getctime(os.path.join(directory, x)))
-        return os.path.join(directory, latest_file)
-    return None
-
-# 🚀 Step 2: Load the Latest Bhavcopy Files
-latest_cash_market_file = get_latest_file(cash_market_path, "sec_bhavdata_full_")
-latest_fo_bhavcopy_file = get_latest_file(fo_bhavcopy_path, "fo_bhavcopy_")
+# 🚀 Step 2: Load Latest Bhavcopy Files
+def load_csv_from_drive(file_id):
+    file_url = f"{gdrive_base_url}{file_id}"
+    return pd.read_csv(file_url)
 
 st.title("📊 NSE Options Analysis Dashboard")
 
 # 📌 Display Cash Market Data
-if latest_cash_market_file and os.path.exists(latest_cash_market_file):
-    cash_market_df = pd.read_csv(latest_cash_market_file)
-    st.subheader("📌 Latest Cash Market Bhavcopy")
+if uploaded_cash_file is not None:
+    cash_market_df = pd.read_csv(uploaded_cash_file)
+    st.subheader("📌 Latest Cash Market Bhavcopy (Uploaded)")
     st.dataframe(cash_market_df)
-else:
-    st.error("❌ No Cash Market Data Found!")
+elif cash_market_file_id:
+    try:
+        cash_market_df = load_csv_from_drive(cash_market_file_id)
+        st.subheader("📌 Latest Cash Market Bhavcopy (From Drive)")
+        st.dataframe(cash_market_df)
+    except Exception as e:
+        st.error(f"❌ Error loading Cash Market Bhavcopy: {e}")
 
 # 📌 Display F&O Bhavcopy Data
-if latest_fo_bhavcopy_file and os.path.exists(latest_fo_bhavcopy_file):
-    fo_bhavcopy_df = pd.read_csv(latest_fo_bhavcopy_file)
-    st.subheader("📌 Latest F&O Bhavcopy")
+if uploaded_fo_file is not None:
+    fo_bhavcopy_df = pd.read_csv(uploaded_fo_file)
+    st.subheader("📌 Latest F&O Bhavcopy (Uploaded)")
     st.dataframe(fo_bhavcopy_df)
-else:
-    st.error("❌ No F&O Bhavcopy Data Found!")
+elif fo_bhavcopy_file_id:
+    try:
+        fo_bhavcopy_df = load_csv_from_drive(fo_bhavcopy_file_id)
+        st.subheader("📌 Latest F&O Bhavcopy (From Drive)")
+        st.dataframe(fo_bhavcopy_df)
+    except Exception as e:
+        st.error(f"❌ Error loading F&O Bhavcopy: {e}")
 
-# 📥 Download Report Button
+# 📥 Download Report Buttons
 st.subheader("📥 Download Latest Report")
-if latest_cash_market_file:
-    st.markdown(f"[Download Cash Market Bhavcopy](file://{latest_cash_market_file})")
-if latest_fo_bhavcopy_file:
-    st.markdown(f"[Download F&O Bhavcopy](file://{latest_fo_bhavcopy_file})")
+if cash_market_file_id:
+    st.markdown(f"[Download Cash Market Bhavcopy](https://drive.google.com/uc?id={cash_market_file_id})")
+if fo_bhavcopy_file_id:
+    st.markdown(f"[Download F&O Bhavcopy](https://drive.google.com/uc?id={fo_bhavcopy_file_id})")
