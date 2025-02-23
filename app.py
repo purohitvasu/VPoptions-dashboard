@@ -1,45 +1,45 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import requests
+import os
+import datetime
 
-# 🚀 Step 1: Define Google Drive file links
-cash_market_url = "https://drive.google.com/uc?id=YOUR_CASH_MARKET_FILE_ID"
-fo_bhavcopy_url = "https://drive.google.com/uc?id=YOUR_FO_BHAVCOPY_FILE_ID"
-pcr_chart_url = "https://drive.google.com/uc?id=YOUR_PCR_CHART_FILE_ID"
+# 🚀 Step 1: Define Google Drive Path
+nse_drive_path = "/content/drive/MyDrive/NSE_Data/"
 
-# 🚀 Step 2: Load Cash Market Data
-@st.cache_data
-def load_cash_market_data():
-    return pd.read_csv(cash_market_url)
+cash_market_path = os.path.join(nse_drive_path, "Cash_Market")
+fo_bhavcopy_path = os.path.join(nse_drive_path, "F&O_Bhavcopy")
 
-# 🚀 Step 3: Load F&O Analysis Data
-@st.cache_data
-def load_fo_analysis_data():
-    return pd.read_csv(fo_bhavcopy_url)
+# Function to Get the Latest File
+def get_latest_file(directory, prefix):
+    files = [f for f in os.listdir(directory) if f.startswith(prefix) and f.endswith(".csv")]
+    if files:
+        latest_file = max(files, key=lambda x: os.path.getctime(os.path.join(directory, x)))
+        return os.path.join(directory, latest_file)
+    return None
 
-# 🚀 Step 4: Display Data in Streamlit
+# 🚀 Step 2: Load the Latest Cash Market File
+latest_cash_market_file = get_latest_file(cash_market_path, "sec_bhavdata_full_")
+latest_fo_bhavcopy_file = get_latest_file(fo_bhavcopy_path, "fo_bhavcopy_")
+
 st.title("📊 NSE Options Analysis Dashboard")
 
-# Load Data
-cash_market_df = load_cash_market_data()
-fo_analysis_df = load_fo_analysis_data()
-
 # 📌 Display Cash Market Data
-st.subheader("📌 Cash Market Bhavcopy")
-st.dataframe(cash_market_df)
+if latest_cash_market_file:
+    cash_market_df = pd.read_csv(latest_cash_market_file)
+    st.subheader("📌 Latest Cash Market Bhavcopy")
+    st.dataframe(cash_market_df)
+else:
+    st.error("❌ No Cash Market Data Found!")
 
 # 📌 Display F&O Bhavcopy Data
-st.subheader("📌 F&O Bhavcopy Analysis")
-st.dataframe(fo_analysis_df)
+if latest_fo_bhavcopy_file:
+    fo_bhavcopy_df = pd.read_csv(latest_fo_bhavcopy_file)
+    st.subheader("📌 Latest F&O Bhavcopy")
+    st.dataframe(fo_bhavcopy_df)
+else:
+    st.error("❌ No F&O Bhavcopy Data Found!")
 
-# 🚀 Step 5: Display PCR Trend Chart
-st.subheader("📈 PCR Trend Chart (Last 13 Days)")
-st.image(pcr_chart_url, caption="Put-Call Ratio Trends")
-
-# 🚀 Step 6: Add Download Report Button
-report_url = "https://drive.google.com/uc?id=YOUR_DAILY_REPORT_FILE_ID"
-st.markdown(
-    f'<a href="{report_url}" target="_blank"><button style="padding:10px 20px; font-size:16px;">📥 Download Latest Report</button></a>',
-    unsafe_allow_html=True
-)
+# 📥 Download Report Button
+st.subheader("📥 Download Latest Report")
+st.write(f"[Download Cash Market Bhavcopy]({latest_cash_market_file})")
+st.write(f"[Download F&O Bhavcopy]({latest_fo_bhavcopy_file})")
