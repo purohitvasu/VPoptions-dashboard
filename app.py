@@ -26,7 +26,9 @@ if uploaded_file:
     cash_market_df = None
     if set(["TckrSymb", "LAST_PRICE", "DELIV_PER"]).issubset(df.columns):
         cash_market_df = df[["TckrSymb", "LAST_PRICE", "DELIV_PER"]]  # Select relevant columns
-    else:
+    
+    # Check if 'OptnTp' exists before processing
+    if "OptnTp" in df.columns:
         df_ce = df[df["OptnTp"] == "CE"].groupby("TckrSymb", as_index=False)["OpnIntrst"].sum()
         df_ce.rename(columns={"OpnIntrst": "CE_OI"}, inplace=True)
         
@@ -58,5 +60,7 @@ if uploaded_file:
         
         st.write("### Filtered Data")
         st.write(merged_df)
+    else:
+        st.warning("Column 'OptnTp' is missing in the uploaded file. Unable to process CE and PE Open Interest.")
 else:
     st.warning("Please upload a CSV file.")
