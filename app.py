@@ -24,6 +24,7 @@ if uploaded_files:
 def load_and_merge_data(directory):
     all_files = [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith(".csv")]
     data_frames = []
+    cash_market_df = None  # Placeholder for Cash Market Bhavcopy
     
     for file in all_files:
         df = pd.read_csv(file)
@@ -32,12 +33,34 @@ def load_and_merge_data(directory):
         # Extract date from filename (assuming format includes YYYYMMDD)
         date_str = "".join(filter(str.isdigit, os.path.basename(file)))  # Extract numbers from filename
         df["Date"] = pd.to_datetime(date_str, format="%Y%m%d", errors="coerce")
-        data_frames.append(df)
+        
+        # Identify Cash Market Bhavcopy based on known structure
+        if "LAST_PRICE" in df.columns and "DELIV_PER" in df.columns:
+            cash_market_df = df[["TckrSymb", "LAST_PRICE", "DELIV_PER"]]  # Select relevant columns
+        else:
+            data_frames.append(df)
     
-    # Combine all files based on TckrSymb and Expiry Date
+    # Combine all F&O files based on TckrSymb and Expiry Date
     if data_frames:
         merged_df = pd.concat(data_frames, ignore_index=True)
-        merged_df = merged_df.groupby(["TckrSymb", "XpryDt"], as_index=False).sum()  # Merge based on Symbol and Expiry Date
+        
+        # Separate CE and PE Open Interest into different columns
+        merged_df_ce = merged_df[merged_df["OptnTp"] == "CE"].groupby(["TckrSymb", "XpryDt"], as_index=False)["OpnIntrst"].sum()
+        merged_df_ce.rename(columns={"OpnIntrst": "CE_OpnIntrst"}, inplace=True)
+        
+        merged_df_pe = merged_df[merged_df["OptnTp"] == "PE"].groupby(["TckrSymb", "XpryDt"], as_index=False)["OpnIntrst"].sum()
+        merged_df_pe.rename(columns={"OpnIntrst": "PE_OpnIntrst"}, inplace=True)
+        
+        # Merge CE and PE Open Interest
+        merged_df = pd.merge(merged_df_ce, merged_df_pe, on=["TckrSymb", "XpryDt"], how="outer").fillna(0)
+        
+        # Compute PCR (Put-Call Ratio)
+        merged_df["PCR"] = merged_df["PE_OpnIntrst"] / merged_df["CE_OpnIntrst"].replace(0, 1)
+        
+        # Merge with Cash Market Bhavcopy if available
+        if cash_market_df is not None:
+            merged_df = merged_df.merge(cash_market_df, on="TckrSymb", how="left")
+        
         return merged_df
     else:
         return None
@@ -45,8 +68,19 @@ def load_and_merge_data(directory):
 # Load merged data
 merged_data = load_and_merge_data(STORAGE_DIR)
 if merged_data is not None:
-    st.write("### Merged Data Preview:")
-    st.write(merged_data.head())
+    # Filters for user selection
+    st.sidebar.header("Filters")
+    expiry_dates = merged_data["XpryDt"].dropna().unique()
+    selected_expiry = st.sidebar.selectbox("Select Expiry Date", expiry_dates)
+    deliv_per_range = st.sidebar.slider("Delivery Percentage Range", float(merged_data["DELIV_PER"].min()), float(merged_data["DELIV_PER"].max()), (float(merged_data["DELIV_PER"].min()), float(merged_data["DELIV_PER"].max())))
+    
+    # Apply filters
+    filtered_data = merged_data[(merged_data["XpryDt"] == selected_expiry) & (merged_data["DELIV_PER"].between(deliv_per_range[0], deliv_per_range[1]))]
+    
+    # Display pivot-style table
+    pivot_table = filtered_data.pivot_table(index="TckrSymb", values=["CE_OpnIntrst", "PE_OpnIntrst", "PCR", "LAST_PRICE", "DELIV_PER"], aggfunc="sum")
+    st.write("### Pivot Table View")
+    st.write(pivot_table)
 else:
     st.warning("No data available. Please upload CSV files.")
 
