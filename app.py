@@ -68,11 +68,6 @@ if cash_market_file and fo_bhavcopy_file:
         
         st.success(f"Merged data saved as {merged_filename}")
         
-        # Display Pivot Table
-        pivot_table = merged_df[["TckrSymb", "LAST_PRICE", "DELIV_PER", "CE_OI", "PE_OI", "PCR"]]
-        st.write("### Mapped Stock Data")
-        st.write(pivot_table)
-        
         # Filters
         st.sidebar.header("Filters")
         if "DELIV_PER" in merged_df.columns and "PCR" in merged_df.columns:
@@ -81,7 +76,7 @@ if cash_market_file and fo_bhavcopy_file:
             
             filtered_df = merged_df[(merged_df["DELIV_PER"].between(deliv_per_range[0], deliv_per_range[1])) & (merged_df["PCR"].between(pcr_range[0], pcr_range[1]))]
             
-            st.write("### Filtered Data")
+            st.write("### F&O Stock Data for Today")
             st.write(filtered_df)
     else:
         st.warning("Required columns 'TckrSymb' or 'OptnTp' missing in the F&O Bhavcopy. Please check the file.")
