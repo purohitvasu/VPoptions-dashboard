@@ -46,7 +46,12 @@ if cash_market_file and fo_bhavcopy_file:
     
     if "TckrSymb" in fo_df.columns and "OptnTp" in fo_df.columns and "XpryDt" in fo_df.columns:
         fo_df["OpnIntrst"] = pd.to_numeric(fo_df["OpnIntrst"], errors="coerce")
-        fo_df["ChgInOpnIntrst"] = pd.to_numeric(fo_df["ChgInOpnIntrst"], errors="coerce")
+        
+        # Handle missing 'ChgInOpnIntrst' column
+        if "ChgInOpnIntrst" in fo_df.columns:
+            fo_df["ChgInOpnIntrst"] = pd.to_numeric(fo_df["ChgInOpnIntrst"], errors="coerce")
+        else:
+            fo_df["ChgInOpnIntrst"] = 0  # Default to zero if column is missing
         
         # Convert Expiry Date to DateTime for sorting
         fo_df["XpryDt"] = pd.to_datetime(fo_df["XpryDt"], errors="coerce")
