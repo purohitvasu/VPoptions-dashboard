@@ -27,24 +27,8 @@ if uploaded_files:
         # Display columns to check missing ones
         st.write("Columns in uploaded file:", df.columns.tolist())
         
-        # Check for required columns
-        required_columns = ["PREV_CLOSE", "DELIV_QTY"]
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        
-        if missing_columns:
-            st.error(f"Missing columns in uploaded file: {missing_columns}")
-        else:
-            st.success("All required columns are present!")
-            
-            # Extract required columns
-            prev_close = df["PREV_CLOSE"]
-            deliv_qty = df["DELIV_QTY"]
-            
-            st.write("Preview of PREV_CLOSE:")
-            st.write(prev_close.head())
-            
-            st.write("Preview of DELIV_QTY:")
-            st.write(deliv_qty.head())
+        # Proceed without checking for specific columns
+        st.success("File successfully loaded!")
 
 # Display list of stored files
 stored_files = os.listdir(STORAGE_DIR)
