@@ -35,7 +35,7 @@ def load_and_merge_data(directory):
         df["Date"] = pd.to_datetime(date_str, format="%Y%m%d", errors="coerce")
         
         # Identify Cash Market Bhavcopy based on known structure
-        if "LAST_PRICE" in df.columns and "DELIV_PER" in df.columns:
+        if set(["TckrSymb", "LAST_PRICE", "DELIV_PER"]).issubset(df.columns):
             cash_market_df = df[["TckrSymb", "LAST_PRICE", "DELIV_PER"]]  # Select relevant columns
         else:
             data_frames.append(df)
@@ -72,13 +72,21 @@ if merged_data is not None:
     st.sidebar.header("Filters")
     expiry_dates = merged_data["XpryDt"].dropna().unique()
     selected_expiry = st.sidebar.selectbox("Select Expiry Date", expiry_dates)
-    deliv_per_range = st.sidebar.slider("Delivery Percentage Range", float(merged_data["DELIV_PER"].min()), float(merged_data["DELIV_PER"].max()), (float(merged_data["DELIV_PER"].min()), float(merged_data["DELIV_PER"].max())))
     
-    # Apply filters
-    filtered_data = merged_data[(merged_data["XpryDt"] == selected_expiry) & (merged_data["DELIV_PER"].between(deliv_per_range[0], deliv_per_range[1]))]
+    if "DELIV_PER" in merged_data.columns:
+        deliv_per_range = st.sidebar.slider("Delivery Percentage Range", float(merged_data["DELIV_PER"].min()), float(merged_data["DELIV_PER"].max()), (float(merged_data["DELIV_PER"].min()), float(merged_data["DELIV_PER"].max())))
+        filtered_data = merged_data[(merged_data["XpryDt"] == selected_expiry) & (merged_data["DELIV_PER"].between(deliv_per_range[0], deliv_per_range[1]))]
+    else:
+        filtered_data = merged_data[merged_data["XpryDt"] == selected_expiry]
     
     # Display pivot-style table
-    pivot_table = filtered_data.pivot_table(index="TckrSymb", values=["CE_OpnIntrst", "PE_OpnIntrst", "PCR", "LAST_PRICE", "DELIV_PER"], aggfunc="sum")
+    pivot_columns = ["CE_OpnIntrst", "PE_OpnIntrst", "PCR"]
+    if "LAST_PRICE" in merged_data.columns:
+        pivot_columns.append("LAST_PRICE")
+    if "DELIV_PER" in merged_data.columns:
+        pivot_columns.append("DELIV_PER")
+    
+    pivot_table = filtered_data.pivot_table(index="TckrSymb", values=pivot_columns, aggfunc="sum")
     st.write("### Pivot Table View")
     st.write(pivot_table)
 else:
