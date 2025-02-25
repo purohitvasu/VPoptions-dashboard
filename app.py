@@ -44,16 +44,21 @@ if cash_market_file and fo_bhavcopy_file:
     fo_df = pd.read_csv(fo_bhavcopy_path)
     fo_df.columns = fo_df.columns.str.strip()
     
-    if "TckrSymb" in fo_df.columns and "OptnTp" in fo_df.columns:
+    if "TckrSymb" in fo_df.columns and "OptnTp" in fo_df.columns and "XpryDt" in fo_df.columns:
         fo_df["OpnIntrst"] = pd.to_numeric(fo_df["OpnIntrst"], errors="coerce")
+        fo_df["ChgInOpnIntrst"] = pd.to_numeric(fo_df["ChgInOpnIntrst"], errors="coerce")
         
-        fo_ce = fo_df[fo_df["OptnTp"] == "CE"].groupby("TckrSymb", as_index=False)["OpnIntrst"].sum()
-        fo_ce.rename(columns={"OpnIntrst": "CE_OI"}, inplace=True)
+        # Convert Expiry Date to DateTime for sorting
+        fo_df["XpryDt"] = pd.to_datetime(fo_df["XpryDt"], errors="coerce")
+        fo_df = fo_df.sort_values(by="XpryDt")
         
-        fo_pe = fo_df[fo_df["OptnTp"] == "PE"].groupby("TckrSymb", as_index=False)["OpnIntrst"].sum()
-        fo_pe.rename(columns={"OpnIntrst": "PE_OI"}, inplace=True)
+        fo_ce = fo_df[fo_df["OptnTp"] == "CE"].groupby(["TckrSymb", "XpryDt"], as_index=False)[["OpnIntrst", "ChgInOpnIntrst"]].sum()
+        fo_ce.rename(columns={"OpnIntrst": "CE_OI", "ChgInOpnIntrst": "CE_OI_Change"}, inplace=True)
         
-        merged_df = pd.merge(fo_ce, fo_pe, on="TckrSymb", how="outer").fillna(0)
+        fo_pe = fo_df[fo_df["OptnTp"] == "PE"].groupby(["TckrSymb", "XpryDt"], as_index=False)[["OpnIntrst", "ChgInOpnIntrst"]].sum()
+        fo_pe.rename(columns={"OpnIntrst": "PE_OI", "ChgInOpnIntrst": "PE_OI_Change"}, inplace=True)
+        
+        merged_df = pd.merge(fo_ce, fo_pe, on=["TckrSymb", "XpryDt"], how="outer").fillna(0)
         merged_df["PCR"] = merged_df["PE_OI"] / merged_df["CE_OI"].replace(0, 1)
         
         # Merge with Cash Market Bhavcopy if available
@@ -79,6 +84,6 @@ if cash_market_file and fo_bhavcopy_file:
             st.write("### F&O Stock Data for Today")
             st.write(filtered_df)
     else:
-        st.warning("Required columns 'TckrSymb' or 'OptnTp' missing in the F&O Bhavcopy. Please check the file.")
+        st.warning("Required columns 'TckrSymb', 'OptnTp', or 'XpryDt' missing in the F&O Bhavcopy. Please check the file.")
 else:
     st.warning("Please upload both Cash Market and F&O Bhavcopy files.")
