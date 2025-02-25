@@ -23,11 +23,10 @@ if uploaded_file:
     df = pd.read_csv(file_path)
     df.columns = df.columns.str.strip()  # Remove leading/trailing spaces
     
-    # Identify Cash Market Bhavcopy
+    cash_market_df = None
     if set(["TckrSymb", "LAST_PRICE", "DELIV_PER"]).issubset(df.columns):
         cash_market_df = df[["TckrSymb", "LAST_PRICE", "DELIV_PER"]]  # Select relevant columns
     else:
-        # Process F&O Bhavcopy
         df_ce = df[df["OptnTp"] == "CE"].groupby("TckrSymb", as_index=False)["OpnIntrst"].sum()
         df_ce.rename(columns={"OpnIntrst": "CE_OI"}, inplace=True)
         
@@ -37,18 +36,24 @@ if uploaded_file:
         merged_df = pd.merge(df_ce, df_pe, on="TckrSymb", how="outer").fillna(0)
         merged_df["PCR"] = merged_df["PE_OI"] / merged_df["CE_OI"].replace(0, 1)
         
-        # Merge with Cash Market Bhavcopy
-        if 'cash_market_df' in locals():
+        if cash_market_df is not None:
             merged_df = merged_df.merge(cash_market_df, on="TckrSymb", how="left")
         
+        # Ensure Last Price and Delivery Percentage are in the table
+        if "LAST_PRICE" not in merged_df.columns:
+            merged_df["LAST_PRICE"] = None
+        if "DELIV_PER" not in merged_df.columns:
+            merged_df["DELIV_PER"] = None
+        
         # Display Pivot Table
+        pivot_table = merged_df[["TckrSymb", "LAST_PRICE", "DELIV_PER", "CE_OI", "PE_OI", "PCR"]]
         st.write("### Pivot Table View")
-        st.write(merged_df)
+        st.write(pivot_table)
         
         # Filters
         st.sidebar.header("Filters")
         if "DELIV_PER" in merged_df.columns:
-            deliv_per_range = st.sidebar.slider("Delivery Percentage Range", float(merged_df["DELIV_PER"].min()), float(merged_df["DELIV_PER"].max()), (float(merged_df["DELIV_PER"].min()), float(merged_df["DELIV_PER"].max())))
+            deliv_per_range = st.sidebar.slider("Delivery Percentage Range", float(merged_df["DELIV_PER"].min(skipna=True)), float(merged_df["DELIV_PER"].max(skipna=True)), (float(merged_df["DELIV_PER"].min(skipna=True)), float(merged_df["DELIV_PER"].max(skipna=True))))
             merged_df = merged_df[merged_df["DELIV_PER"].between(deliv_per_range[0], deliv_per_range[1])]
         
         st.write("### Filtered Data")
