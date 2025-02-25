@@ -20,7 +20,7 @@ if uploaded_files:
         
         st.success(f"File saved: {uploaded_file.name}")
 
-# Read and merge all stored CSV files
+# Read and merge all stored CSV files based on TckrSymb and Expiry Date
 def load_and_merge_data(directory):
     all_files = [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith(".csv")]
     data_frames = []
@@ -34,9 +34,10 @@ def load_and_merge_data(directory):
         df["Date"] = pd.to_datetime(date_str, format="%Y%m%d", errors="coerce")
         data_frames.append(df)
     
-    # Combine all files into a single DataFrame
+    # Combine all files based on TckrSymb and Expiry Date
     if data_frames:
         merged_df = pd.concat(data_frames, ignore_index=True)
+        merged_df = merged_df.groupby(["TckrSymb", "XpryDt"], as_index=False).sum()  # Merge based on Symbol and Expiry Date
         return merged_df
     else:
         return None
