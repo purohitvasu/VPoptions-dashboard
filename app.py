@@ -31,13 +31,18 @@ if cash_market_file and fo_bhavcopy_file:
     # Read and process Cash Market Bhavcopy
     cash_df = pd.read_csv(cash_market_path)
     cash_df.columns = cash_df.columns.str.strip()
-    cash_df = cash_df[["TckrSymb", "LAST_PRICE", "DELIV_PER"]]
+    if "SYMBOL" in cash_df.columns:
+        cash_df.rename(columns={"SYMBOL": "TckrSymb"}, inplace=True)
+        cash_df = cash_df[["TckrSymb", "LAST_PRICE", "DELIV_PER"]]
+    else:
+        st.warning("Column 'SYMBOL' not found in Cash Market Bhavcopy. Please check the file.")
+        cash_df = None
     
     # Read and process F&O Bhavcopy
     fo_df = pd.read_csv(fo_bhavcopy_path)
     fo_df.columns = fo_df.columns.str.strip()
     
-    if "OptnTp" in fo_df.columns:
+    if "TckrSymb" in fo_df.columns and "OptnTp" in fo_df.columns:
         fo_ce = fo_df[fo_df["OptnTp"] == "CE"].groupby("TckrSymb", as_index=False)["OpnIntrst"].sum()
         fo_ce.rename(columns={"OpnIntrst": "CE_OI"}, inplace=True)
         
@@ -47,8 +52,9 @@ if cash_market_file and fo_bhavcopy_file:
         merged_df = pd.merge(fo_ce, fo_pe, on="TckrSymb", how="outer").fillna(0)
         merged_df["PCR"] = merged_df["PE_OI"] / merged_df["CE_OI"].replace(0, 1)
         
-        # Merge with Cash Market Bhavcopy
-        merged_df = merged_df.merge(cash_df, on="TckrSymb", how="left")
+        # Merge with Cash Market Bhavcopy if available
+        if cash_df is not None:
+            merged_df = merged_df.merge(cash_df, on="TckrSymb", how="inner")
         
         # Ensure Last Price and Delivery Percentage are in the table
         if "LAST_PRICE" not in merged_df.columns:
@@ -71,14 +77,20 @@ if cash_market_file and fo_bhavcopy_file:
         
         # Filters
         st.sidebar.header("Filters")
-        deliv_per_range = st.sidebar.slider("Delivery Percentage Range", float(merged_df["DELIV_PER"].min(skipna=True)), float(merged_df["DELIV_PER"].max(skipna=True)), (float(merged_df["DELIV_PER"].min(skipna=True)), float(merged_df["DELIV_PER"].max(skipna=True))))
-        pcr_range = st.sidebar.slider("PCR Range", float(merged_df["PCR"].min(skipna=True)), float(merged_df["PCR"].max(skipna=True)), (float(merged_df["PCR"].min(skipna=True)), float(merged_df["PCR"].max(skipna=True))))
+        if "DELIV_PER" in merged_df.columns:
+            deliv_per_range = st.sidebar.slider("Delivery Percentage Range", float(merged_df["DELIV_PER"].min(skipna=True)), float(merged_df["DELIV_PER"].max(skipna=True)), (float(merged_df["DELIV_PER"].min(skipna=True)), float(merged_df["DELIV_PER"].max(skipna=True))))
+        if "PCR" in merged_df.columns:
+            pcr_range = st.sidebar.slider("PCR Range", float(merged_df["PCR"].min(skipna=True)), float(merged_df["PCR"].max(skipna=True)), (float(merged_df["PCR"].min(skipna=True)), float(merged_df["PCR"].max(skipna=True))))
         
-        filtered_df = merged_df[(merged_df["DELIV_PER"].between(deliv_per_range[0], deliv_per_range[1])) & (merged_df["PCR"].between(pcr_range[0], pcr_range[1]))]
+        filtered_df = merged_df
+        if "DELIV_PER" in merged_df.columns:
+            filtered_df = filtered_df[filtered_df["DELIV_PER"].between(deliv_per_range[0], deliv_per_range[1])]
+        if "PCR" in merged_df.columns:
+            filtered_df = filtered_df[filtered_df["PCR"].between(pcr_range[0], pcr_range[1])]
         
         st.write("### Filtered Data")
         st.write(filtered_df)
     else:
-        st.warning("Column 'OptnTp' is missing in the F&O Bhavcopy. Unable to process CE and PE Open Interest.")
+        st.warning("Required columns 'TckrSymb' or 'OptnTp' missing in the F&O Bhavcopy. Please check the file.")
 else:
     st.warning("Please upload both Cash Market and F&O Bhavcopy files.")
