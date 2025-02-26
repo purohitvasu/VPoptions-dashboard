@@ -4,7 +4,7 @@ import datetime
 import sqlite3
 
 # Streamlit App Title
-st.title("RDX Dashboard - Futures & Options Analysis")
+st.title("RDX-F&O Analysis")
 
 # File Upload Section
 st.sidebar.header("Upload Files")
