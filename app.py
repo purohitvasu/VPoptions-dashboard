@@ -1,9 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
-import gspread
-import json
-from google.oauth2.service_account import Credentials
+import sqlite3
 
 # Streamlit App Title
 st.title("RDX Dashboard - Futures & Options Analysis")
@@ -61,13 +59,8 @@ if cash_file and fo_file:
     st.subheader("RDX Merged Dataset")
     st.dataframe(df_rdx)
     
-    # Load Google Sheets credentials from Streamlit secrets
-    creds_dict = json.loads(st.secrets["gcp_service_account"])
-    creds = Credentials.from_service_account_info(creds_dict)
-    client = gspread.authorize(creds)
-    
-    # Save to Google Sheets
-    sheet = client.open("RDX_Data").sheet1
-    sheet.clear()
-    sheet.update([df_rdx.columns.values.tolist()] + df_rdx.values.tolist())
-    st.success("RDX dataset saved to Google Sheets")
+    # Save to SQLite Database
+    conn = sqlite3.connect("rdx_data.db")
+    df_rdx.to_sql("rdx_table", conn, if_exists="replace", index=False)
+    conn.close()
+    st.success("RDX dataset saved to SQLite database")
