@@ -73,9 +73,9 @@ if cash_file and fo_file:
     filtered_rdx_data = rdx_data[(rdx_data["PCR"] >= min_pcr) & (rdx_data["PCR"] <= max_pcr) &
                                  (rdx_data["Delivery_Percentage"] >= min_deliv) & (rdx_data["Delivery_Percentage"] <= max_deliv)]
     
-    # Display Filtered EOD Data
+    # Display Processed EOD Data in a Single Table with Filters Applied
     st.subheader("Processed EOD Data")
-    st.dataframe(filtered_rdx_data[["TckrSymb", "Future_COI", "Cumulative_Change_OI", "Cumulative_CE_OI", "Cumulative_PE_OI", "PCR", "Open", "High", "Low", "Close", "Delivery_Percentage"]])
+    st.dataframe(filtered_rdx_data)
     
     # Save Processed Data for Download
     output_filename = f"Processed_RDX_{rdx_data['Date'].iloc[0]}.csv"
