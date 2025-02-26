@@ -3,25 +3,34 @@ import pandas as pd
 import datetime
 import os
 
+# Set page configuration for wider layout
+st.set_page_config(layout="wide")
+
 # Streamlit App Title
 st.title("RDX Dashboard")
 
-# Create Tabs
-tabs = st.tabs(["EOD Data", "Historical Data"])
+# Create Tabs with Larger Size
+st.markdown("""
+    <style>
+        .stTabs [data-baseweb="tab-list"] {
+            display: flex;
+            justify-content: center;
+            font-size: 18px !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
-# Sidebar: EOD Data Uploads
-st.sidebar.header("EOD Data Uploads")
-cash_file = st.sidebar.file_uploader("Upload Cash Market Bhavcopy", type=["csv"], key="cash_eod")
-fo_file = st.sidebar.file_uploader("Upload F&O Bhavcopy", type=["csv"], key="fo_eod")
-
-# Sidebar: EOD Data Filters
-st.sidebar.header("EOD Data Filters")
-min_pcr, max_pcr = st.sidebar.slider("Filter by PCR", min_value=0.0, max_value=5.0, value=(0.0, 5.0))
-min_deliv, max_deliv = st.sidebar.slider("Filter by Delivery Percentage", min_value=0.0, max_value=100.0, value=(0.0, 100.0))
+tabs = st.tabs(["📊 EOD Data", "📈 Historical Data"])
 
 # Tab 1: EOD Data
 with tabs[0]:
     st.header("EOD Data")
+    
+    # Sidebar: EOD Data Uploads (Smaller Size)
+    st.sidebar.markdown("### EOD Data Uploads")
+    cash_file = st.sidebar.file_uploader("Upload Cash Market Bhavcopy", type=["csv"], key="cash_eod")
+    fo_file = st.sidebar.file_uploader("Upload F&O Bhavcopy", type=["csv"], key="fo_eod")
+
     if cash_file and fo_file:
         st.success("Files Uploaded Successfully!")
         
@@ -72,13 +81,18 @@ with tabs[0]:
         fo_data = process_fo_data(fo_file)
         rdx_data = fo_data.merge(cash_data, on="TckrSymb", how="inner")
         
+        # Sidebar: EOD Data Filters (Smaller Size)
+        st.sidebar.markdown("### EOD Data Filters")
+        min_pcr, max_pcr = st.sidebar.slider("Filter by PCR", min_value=0.0, max_value=5.0, value=(0.0, 5.0))
+        min_deliv, max_deliv = st.sidebar.slider("Filter by Delivery Percentage", min_value=0.0, max_value=100.0, value=(0.0, 100.0))
+
         # Apply Filters
         filtered_rdx_data = rdx_data[(rdx_data["PCR"] >= min_pcr) & (rdx_data["PCR"] <= max_pcr) &
                                      (rdx_data["Delivery_Percentage"] >= min_deliv) & (rdx_data["Delivery_Percentage"] <= max_deliv)]
         
-        # Display Processed EOD Data in a Single Table with Filters Applied
+        # Display Processed EOD Data in Full Page
         st.subheader("Processed EOD Data")
-        st.dataframe(filtered_rdx_data)
+        st.dataframe(filtered_rdx_data, use_container_width=True)
         
         # Save Processed Data for Download
         output_filename = f"Processed_RDX_{rdx_data['Date'].iloc[0]}.csv"
@@ -95,10 +109,10 @@ with tabs[0]:
 
 # Tab 2: Historical Data
 with tabs[1]:
-    st.header("Historical Data")
-    st.sidebar.header("Historical Data Upload")
+    st.header("📈 Historical Data")
+    st.sidebar.markdown("### Historical Data Upload")
     historical_file = st.sidebar.file_uploader("Upload Historical Data", type=["csv"], key="historical")
     if historical_file:
         historical_data = pd.read_csv(historical_file)
         st.subheader("Historical Data")
-        st.dataframe(historical_data)
+        st.dataframe(historical_data, use_container_width=True)
