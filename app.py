@@ -34,6 +34,7 @@ if cash_file and fo_file:
             "CLOSE_PRICE": "Close",
             "DELIV_PER": "Delivery_Percentage"
         }, inplace=True)
+        df_cash["Delivery_Percentage"] = pd.to_numeric(df_cash["Delivery_Percentage"], errors='coerce')
         return df_cash
     
     def process_fo_data(fo_file):
@@ -61,7 +62,7 @@ if cash_file and fo_file:
         
         trade_date = df_fo["TradDt"].iloc[0] if "TradDt" in df_fo.columns else datetime.datetime.today().strftime('%Y-%m-%d')
         df_rdx.insert(0, "Date", trade_date)
-        
+        df_rdx["PCR"] = pd.to_numeric(df_rdx["PCR"], errors='coerce')
         return df_rdx
     
     cash_data = process_cash_data(cash_file)
