@@ -1,94 +1,69 @@
 import streamlit as st
 import pandas as pd
-import os
 import datetime
+from google.colab import drive
 
-# Define storage directory
-STORAGE_DIR = "uploaded_data"
-os.makedirs(STORAGE_DIR, exist_ok=True)
+# Mount Google Drive
+drive.mount('/content/drive')
 
-# Streamlit file uploader
-st.title("NSE Bhavcopy Upload & Storage")
+# Streamlit App Title
+st.title("RDX Dashboard - Futures & Options Analysis")
 
-st.header("Upload Cash Market Bhavcopy")
-cash_market_file = st.file_uploader("Upload Cash Market File", type=["csv"], key="cash")
+# File Upload Section
+st.sidebar.header("Upload Files")
+cash_file = st.sidebar.file_uploader("Upload Cash Market Bhavcopy", type=["csv"])
+fo_file = st.sidebar.file_uploader("Upload F&O Bhavcopy", type=["csv"])
 
-st.header("Upload F&O Bhavcopy")
-fo_bhavcopy_file = st.file_uploader("Upload F&O Bhavcopy File", type=["csv"], key="fo")
-
-if cash_market_file and fo_bhavcopy_file:
-    # Save files
-    cash_market_path = os.path.join(STORAGE_DIR, cash_market_file.name)
-    fo_bhavcopy_path = os.path.join(STORAGE_DIR, fo_bhavcopy_file.name)
+if cash_file and fo_file:
+    # Load Cash Market Data
+    df_cash = pd.read_csv(cash_file)
+    df_cash.columns = df_cash.columns.str.strip()
+    df_cash["DELIV_PER"] = pd.to_numeric(df_cash["DELIV_PER"], errors="coerce")
+    df_cash_filtered = df_cash[["SYMBOL", "DELIV_PER"]]
+    df_cash_filtered.rename(columns={"SYMBOL": "TckrSymb"}, inplace=True)
     
-    with open(cash_market_path, "wb") as f:
-        f.write(cash_market_file.getbuffer())
-    with open(fo_bhavcopy_path, "wb") as f:
-        f.write(fo_bhavcopy_file.getbuffer())
+    # Load F&O Data
+    df_fo = pd.read_csv(fo_file)
+    df_futures = df_fo[df_fo['FinInstrmTp'].isin(['STF', 'IDF'])]
+    df_options = df_fo[df_fo['FinInstrmTp'].isin(['STO', 'IDO'])]
     
-    st.success("Files uploaded successfully!")
+    # Process Futures Data
+    df_futures_cumulative = df_futures.groupby(["TckrSymb"]).agg({
+        "OpnIntrst": "sum",
+        "ChngInOpnIntrst": "sum",
+        "OpnPric": "first",
+        "HghPric": "max",
+        "LwPric": "min",
+        "ClsPric": "last"
+    }).reset_index()
+    df_futures_cumulative.rename(columns={
+        "OpnIntrst": "Future_COI",
+        "ChngInOpnIntrst": "Cumulative_Change_OI",
+        "OpnPric": "Open_Price",
+        "HghPric": "High_Price",
+        "LwPric": "Low_Price",
+        "ClsPric": "Close_Price"
+    }, inplace=True)
     
-    # Read and process Cash Market Bhavcopy
-    cash_df = pd.read_csv(cash_market_path)
-    cash_df.columns = cash_df.columns.str.strip()
-    if "SYMBOL" in cash_df.columns:
-        cash_df.rename(columns={"SYMBOL": "TckrSymb"}, inplace=True)
-        cash_df["LAST_PRICE"] = pd.to_numeric(cash_df["LAST_PRICE"], errors="coerce")
-        cash_df["DELIV_PER"] = pd.to_numeric(cash_df["DELIV_PER"], errors="coerce")
-        cash_df = cash_df[["TckrSymb", "LAST_PRICE", "DELIV_PER"]]
-    else:
-        st.warning("Column 'SYMBOL' not found in Cash Market Bhavcopy. Please check the file.")
-        cash_df = None
+    # Process Options Data
+    df_options_cumulative = df_options.groupby(["TckrSymb", "OptnTp"]).agg({"OpnIntrst": "sum"}).reset_index()
+    df_options_pivot = df_options_cumulative.pivot(index=["TckrSymb"], columns="OptnTp", values="OpnIntrst").reset_index()
+    df_options_pivot.rename(columns={"CE": "Cumulative_CE_OI", "PE": "Cumulative_PE_OI"}, inplace=True)
+    df_options_pivot.fillna(0, inplace=True)
+    df_options_pivot["PCR"] = df_options_pivot["Cumulative_PE_OI"] / df_options_pivot["Cumulative_CE_OI"]
+    df_options_pivot.replace([float('inf'), -float('inf')], 0, inplace=True)
     
-    # Read and process F&O Bhavcopy
-    fo_df = pd.read_csv(fo_bhavcopy_path)
-    fo_df.columns = fo_df.columns.str.strip()
+    # Merge Data
+    df_rdx = df_futures_cumulative.merge(df_options_pivot, on="TckrSymb", how="outer")
+    df_rdx = df_rdx.merge(df_cash_filtered, on="TckrSymb", how="left")
+    df_rdx.rename(columns={"DELIV_PER": "Delivery_Percentage"}, inplace=True)
     
-    if "TckrSymb" in fo_df.columns and "OptnTp" in fo_df.columns and "XpryDt" in fo_df.columns:
-        fo_df["OpnIntrst"] = pd.to_numeric(fo_df["OpnIntrst"], errors="coerce")
-        
-        # Handle missing 'ChgInOpnIntrst' column
-        if "ChgInOpnIntrst" in fo_df.columns:
-            fo_df["ChgInOpnIntrst"] = pd.to_numeric(fo_df["ChgInOpnIntrst"], errors="coerce")
-        else:
-            fo_df["ChgInOpnIntrst"] = 0  # Default to zero if column is missing
-        
-        # Convert Expiry Date to DateTime for sorting
-        fo_df["XpryDt"] = pd.to_datetime(fo_df["XpryDt"], errors="coerce")
-        fo_df = fo_df.sort_values(by="XpryDt")
-        
-        fo_ce = fo_df[fo_df["OptnTp"] == "CE"].groupby(["TckrSymb", "XpryDt"], as_index=False)[["OpnIntrst", "ChgInOpnIntrst"]].sum()
-        fo_ce.rename(columns={"OpnIntrst": "CE_OI", "ChgInOpnIntrst": "CE_OI_Change"}, inplace=True)
-        
-        fo_pe = fo_df[fo_df["OptnTp"] == "PE"].groupby(["TckrSymb", "XpryDt"], as_index=False)[["OpnIntrst", "ChgInOpnIntrst"]].sum()
-        fo_pe.rename(columns={"OpnIntrst": "PE_OI", "ChgInOpnIntrst": "PE_OI_Change"}, inplace=True)
-        
-        merged_df = pd.merge(fo_ce, fo_pe, on=["TckrSymb", "XpryDt"], how="outer").fillna(0)
-        merged_df["PCR"] = merged_df["PE_OI"] / merged_df["CE_OI"].replace(0, 1)
-        
-        # Merge with Cash Market Bhavcopy if available
-        if cash_df is not None:
-            merged_df = merged_df.merge(cash_df, on="TckrSymb", how="inner")
-        
-        # Save merged data with today's date
-        today_date = datetime.datetime.today().strftime('%Y%m%d')
-        merged_filename = f"Day_Data_{today_date}.csv"
-        merged_filepath = os.path.join(STORAGE_DIR, merged_filename)
-        merged_df.to_csv(merged_filepath, index=False)
-        
-        st.success(f"Merged data saved as {merged_filename}")
-        
-        # Filters
-        st.sidebar.header("Filters")
-        if "DELIV_PER" in merged_df.columns and "PCR" in merged_df.columns:
-            deliv_per_range = st.sidebar.slider("Delivery Percentage Range", float(merged_df["DELIV_PER"].min(skipna=True)), float(merged_df["DELIV_PER"].max(skipna=True)), (float(merged_df["DELIV_PER"].min(skipna=True)), float(merged_df["DELIV_PER"].max(skipna=True))))
-            pcr_range = st.sidebar.slider("PCR Range", float(merged_df["PCR"].min(skipna=True)), float(merged_df["PCR"].max(skipna=True)), (float(merged_df["PCR"].min(skipna=True)), float(merged_df["PCR"].max(skipna=True))))
-            
-            filtered_df = merged_df[(merged_df["DELIV_PER"].between(deliv_per_range[0], deliv_per_range[1])) & (merged_df["PCR"].between(pcr_range[0], pcr_range[1]))]
-            
-            st.write("### F&O Stock Data for Today")
-            st.write(filtered_df)
-    else:
-        st.warning("Required columns 'TckrSymb', 'OptnTp', or 'XpryDt' missing in the F&O Bhavcopy. Please check the file.")
-else:
-    st.warning("Please upload both Cash Market and F&O Bhavcopy files.")
+    # Display RDX Dataset
+    st.subheader("RDX Merged Dataset")
+    st.dataframe(df_rdx)
+    
+    # Save to Google Drive
+    date_today = datetime.datetime.now().strftime("%Y%m%d")
+    save_path = f"/content/drive/My Drive/RDX_Data_{date_today}.csv"
+    df_rdx.to_csv(save_path, index=False)
+    st.success(f"RDX dataset saved to Google Drive: {save_path}")
