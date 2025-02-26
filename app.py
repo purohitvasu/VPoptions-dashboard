@@ -54,38 +54,26 @@ cursor.execute("""
 conn.commit()
 
 # Check if tables contain data
-query_check = "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='cash_market_table'"
-cursor.execute(query_check)
-cash_table_exists = cursor.fetchone()[0]
-
-query_check = "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='rdx_table'"
-cursor.execute(query_check)
-rdx_table_exists = cursor.fetchone()[0]
+cursor.execute("SELECT COUNT(*) FROM cash_market_table")
+cash_data_count = cursor.fetchone()[0]
+cursor.execute("SELECT COUNT(*) FROM rdx_table")
+rdx_data_count = cursor.fetchone()[0]
 
 merged_rdx_cash_data = pd.DataFrame()
 
-if cash_table_exists and rdx_table_exists:
-    # Check if tables have data
-    cursor.execute("SELECT COUNT(*) FROM cash_market_table")
-cash_data_count = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM rdx_table")
-    rdx_data_count = cursor.fetchone()[0]
-    
-    if cash_data_count > 0 and rdx_data_count > 0:
-        # Fetch Merged Data
-        query = """
-            SELECT f.Date, f.TckrSymb, f.Future_COI, f.Cumulative_Change_OI, 
-                   f.Cumulative_CE_OI, f.Cumulative_PE_OI, f.PCR, 
-                   c.Open, c.High, c.Low, c.Close, c.Delivery_Percentage
-            FROM rdx_table f
-            INNER JOIN cash_market_table c 
-            ON f.Date = c.Date AND f.TckrSymb = c.TckrSymb
-        """
-        merged_rdx_cash_data = pd.read_sql(query, conn)
-    else:
-        st.warning("Tables exist but contain no data. Please upload and process the required files.")
+if cash_data_count > 0 and rdx_data_count > 0:
+    # Fetch Merged Data
+    query = """
+        SELECT f.Date, f.TckrSymb, f.Future_COI, f.Cumulative_Change_OI, 
+               f.Cumulative_CE_OI, f.Cumulative_PE_OI, f.PCR, 
+               c.Open, c.High, c.Low, c.Close, c.Delivery_Percentage
+        FROM rdx_table f
+        INNER JOIN cash_market_table c 
+        ON f.Date = c.Date AND f.TckrSymb = c.TckrSymb
+    """
+    merged_rdx_cash_data = pd.read_sql(query, conn)
 else:
-    st.error("One or both required tables are missing. Please re-run the data processing.")
+    st.warning("Tables exist but contain no data. Please upload and process the required files.")
 
 conn.close()
 
