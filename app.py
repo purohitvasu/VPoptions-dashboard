@@ -1,79 +1,85 @@
-# RDX Ver 1.0 - Updated with Merged F&O and Cash Market Data
-
 import streamlit as st
 import pandas as pd
-import sqlite3
+import datetime
+import os
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from google.oauth2 import service_account
 
 # Streamlit App Title
-st.title("RDX Dashboard - Futures & Options Analysis")
+st.title("RDX Dashboard - Single Day Data Upload")
 
 # File Upload Section
 st.sidebar.header("Upload Files")
 cash_file = st.sidebar.file_uploader("Upload Cash Market Bhavcopy", type=["csv"])
 fo_file = st.sidebar.file_uploader("Upload F&O Bhavcopy", type=["csv"])
 
-# Connect to SQLite database
-db_file = "rdx_data.db"
-conn = sqlite3.connect(db_file)
-cursor = conn.cursor()
+# Function to process Cash Market Data
+def process_cash_data(cash_file):
+    df_cash = pd.read_csv(cash_file)
+    df_cash.columns = df_cash.columns.str.strip()
+    df_cash = df_cash[["SYMBOL", "OPEN_PRICE", "HIGH_PRICE", "LOW_PRICE", "CLOSE_PRICE", "DELIV_PER"]]
+    df_cash.rename(columns={
+        "SYMBOL": "TckrSymb",
+        "OPEN_PRICE": "Open",
+        "HIGH_PRICE": "High",
+        "LOW_PRICE": "Low",
+        "CLOSE_PRICE": "Close",
+        "DELIV_PER": "Delivery_Percentage"
+    }, inplace=True)
+    return df_cash
 
-# List all tables in the database to debug missing table issue
-tables_query = "SELECT name FROM sqlite_master WHERE type='table'"
-cursor.execute(tables_query)
-available_tables = [table[0] for table in cursor.fetchall()]
-st.sidebar.write("Available Tables in DB:", available_tables)
+# Function to process F&O Bhavcopy Data
+def process_fo_data(fo_file):
+    df_fo = pd.read_csv(fo_file)
+    df_futures = df_fo[df_fo['FinInstrmTp'].isin(['STF', 'IDF'])]
+    df_options = df_fo[df_fo['FinInstrmTp'].isin(['STO', 'IDO'])]
+    
+    df_futures_cumulative = df_futures.groupby(["TckrSymb"]).agg({
+        "OpnIntrst": "sum",
+        "ChngInOpnIntrst": "sum"
+    }).reset_index()
+    df_futures_cumulative.rename(columns={
+        "OpnIntrst": "Future_COI",
+        "ChngInOpnIntrst": "Cumulative_Change_OI"
+    }, inplace=True)
+    
+    df_options_cumulative = df_options.groupby(["TckrSymb", "OptnTp"]).agg({"OpnIntrst": "sum"}).reset_index()
+    df_options_pivot = df_options_cumulative.pivot(index=["TckrSymb"], columns="OptnTp", values="OpnIntrst").reset_index()
+    df_options_pivot.rename(columns={"CE": "Cumulative_CE_OI", "PE": "Cumulative_PE_OI"}, inplace=True)
+    df_options_pivot.fillna(0, inplace=True)
+    df_options_pivot["PCR"] = df_options_pivot["Cumulative_PE_OI"] / df_options_pivot["Cumulative_CE_OI"]
+    df_options_pivot.replace([float('inf'), -float('inf')], 0, inplace=True)
+    
+    df_rdx = df_futures_cumulative.merge(df_options_pivot, on="TckrSymb", how="outer")
+    return df_rdx
 
-# Ensure tables exist
-required_tables = {"cash_market_table", "rdx_table"}
-missing_tables = required_tables - set(available_tables)
-if missing_tables:
-    st.error(f"Missing tables in database: {missing_tables}. Please ensure data is properly uploaded.")
-    conn.close()
-else:
-    # Check if tables contain data
-    cursor.execute("SELECT COUNT(*) FROM cash_market_table")
-    cash_data_count = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM rdx_table")
-    rdx_data_count = cursor.fetchone()[0]
-
-    merged_rdx_cash_data = pd.DataFrame()
-
-    if cash_data_count > 0 and rdx_data_count > 0:
-        # Fetch Merged Data
-        query = """
-            SELECT f.Date, f.TckrSymb, f.Future_COI, f.Cumulative_Change_OI, 
-                   f.Cumulative_CE_OI, f.Cumulative_PE_OI, f.PCR, 
-                   c.Open, c.High, c.Low, c.Close, c.Delivery_Percentage
-            FROM rdx_table f
-            INNER JOIN cash_market_table c 
-            ON f.Date = c.Date AND f.TckrSymb = c.TckrSymb
-        """
-        merged_rdx_cash_data = pd.read_sql(query, conn)
-    else:
-        st.warning("Tables exist but contain no data. Please upload and process the required files.")
-
-    conn.close()
-
-    # Check if data exists before filtering
-    if not merged_rdx_cash_data.empty:
-        # Sidebar Filters
-        st.sidebar.subheader("Filters")
-        deliv_min, deliv_max = st.sidebar.slider("Delivery Percentage Range", 
-            min_value=float(merged_rdx_cash_data["Delivery_Percentage"].min()), 
-            max_value=float(merged_rdx_cash_data["Delivery_Percentage"].max()), 
-            value=(float(merged_rdx_cash_data["Delivery_Percentage"].min()), float(merged_rdx_cash_data["Delivery_Percentage"].max())))
-        
-        pcr_min, pcr_max = st.sidebar.slider("PCR Range", 
-            min_value=float(merged_rdx_cash_data["PCR"].min()), 
-            max_value=float(merged_rdx_cash_data["PCR"].max()), 
-            value=(float(merged_rdx_cash_data["PCR"].min()), float(merged_rdx_cash_data["PCR"].max())))
-
-        # Apply Filters
-        df_filtered = merged_rdx_cash_data[(merged_rdx_cash_data["Delivery_Percentage"] >= deliv_min) & (merged_rdx_cash_data["Delivery_Percentage"] <= deliv_max) &
-                                            (merged_rdx_cash_data["PCR"] >= pcr_min) & (merged_rdx_cash_data["PCR"] <= pcr_max)]
-
-        # Display Filtered Merged RDX Dataset
-        st.subheader("Filtered Merged F&O and Cash Market Data")
-        st.dataframe(df_filtered)
-    else:
-        st.warning("No data found in the database. Please upload the required files.")
+if cash_file and fo_file:
+    st.success("Files Uploaded Successfully!")
+    
+    cash_data = process_cash_data(cash_file)
+    fo_data = process_fo_data(fo_file)
+    
+    # Merge Processed Data
+    rdx_data = fo_data.merge(cash_data, on="TckrSymb", how="inner")
+    
+    # Add Date
+    trade_date = datetime.datetime.today().strftime('%Y-%m-%d')
+    rdx_data.insert(0, "Date", trade_date)
+    
+    # Display Processed Data
+    st.subheader("Processed RDX Dataset")
+    st.dataframe(rdx_data)
+    
+    # Save to CSV
+    filename = f"RDX_Data_{trade_date}.csv"
+    rdx_data.to_csv(filename, index=False)
+    st.success(f"RDX dataset saved as {filename}")
+    
+    # Google Drive Upload
+    credentials = service_account.Credentials.from_service_account_info(st.secrets["gdrive_credentials"], scopes=["https://www.googleapis.com/auth/drive"])
+    drive_service = build("drive", "v3", credentials=credentials)
+    file_metadata = {"name": filename, "parents": [st.secrets["gdrive_folder_id"]]}
+    media = MediaFileUpload(filename, mimetype="text/csv")
+    drive_service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+    st.success(f"RDX dataset uploaded to Google Drive: {filename}")
