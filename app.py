@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import os
+import sqlite3
 
 # Streamlit App Title
 st.title("RDX Dashboard - Single Day Data Upload")
@@ -10,6 +11,7 @@ st.title("RDX Dashboard - Single Day Data Upload")
 st.sidebar.header("Upload Files")
 cash_file = st.sidebar.file_uploader("Upload Cash Market Bhavcopy", type=["csv"])
 fo_file = st.sidebar.file_uploader("Upload F&O Bhavcopy", type=["csv"])
+db_file = "rdx_data.db"
 
 # Function to process Cash Market Data
 def process_cash_data(cash_file):
@@ -73,3 +75,19 @@ if cash_file and fo_file:
     filename = f"RDX_Data_{rdx_data['Date'].iloc[0]}.csv"
     rdx_data.to_csv(filename, index=False)
     st.success(f"RDX dataset saved as {filename}")
+    
+    # Store data in SQLite
+    conn = sqlite3.connect(db_file)
+    rdx_data.to_sql("rdx_table", conn, if_exists="append", index=False)
+    conn.close()
+    st.success("RDX dataset saved to SQLite database")
+
+# Section to display SQLite stored data
+st.sidebar.subheader("View Stored Data")
+if st.sidebar.button("Load RDX Data from SQLite"):
+    conn = sqlite3.connect(db_file)
+    query = "SELECT * FROM rdx_table"
+    stored_rdx_data = pd.read_sql(query, conn)
+    conn.close()
+    st.subheader("Stored RDX Data from SQLite")
+    st.dataframe(stored_rdx_data)
