@@ -2,33 +2,22 @@ import streamlit as st
 import pandas as pd
 import datetime
 import os
-import sqlite3
 
 # Streamlit App Title
 st.title("RDX Dashboard")
 
-# Database file
-db_file = "rdx_data.db"
+# Sidebar: EOD Data Uploads
+st.sidebar.header("EOD Data Uploads")
+cash_file = st.sidebar.file_uploader("Upload Cash Market Bhavcopy", type=["csv"], key="cash_eod")
+fo_file = st.sidebar.file_uploader("Upload F&O Bhavcopy", type=["csv"], key="fo_eod")
 
-# Clear SQLite database before processing new data
-def clear_database():
-    conn = sqlite3.connect(db_file)
-    cursor = conn.cursor()
-    cursor.execute("DROP TABLE IF EXISTS rdx_table")
-    cursor.execute("DROP TABLE IF EXISTS merged_rdx_table")
-    conn.commit()
-    conn.close()
-    st.sidebar.success("SQLite database cleared successfully")
-
-if st.sidebar.button("Clear SQLite Database"):
-    clear_database()
+# Sidebar: EOD Data Filters
+st.sidebar.header("EOD Data Filters")
+min_pcr, max_pcr = st.sidebar.slider("Filter by PCR", min_value=0.0, max_value=5.0, value=(0.0, 5.0))
+min_deliv, max_deliv = st.sidebar.slider("Filter by Delivery Percentage", min_value=0.0, max_value=100.0, value=(0.0, 100.0))
 
 # Section 1: EOD Data
 st.header("EOD Data")
-
-# File Upload Section for EOD Data
-cash_file = st.file_uploader("Upload Cash Market Bhavcopy", type=["csv"], key="cash_eod")
-fo_file = st.file_uploader("Upload F&O Bhavcopy", type=["csv"], key="fo_eod")
 
 if cash_file and fo_file:
     st.success("Files Uploaded Successfully!")
@@ -79,23 +68,33 @@ if cash_file and fo_file:
     fo_data = process_fo_data(fo_file)
     rdx_data = fo_data.merge(cash_data, on="TckrSymb", how="inner")
     
-    # Display Filtered EOD Data
-    st.subheader("Processed EOD Data")
-    st.dataframe(rdx_data[["TckrSymb", "Future_COI", "Cumulative_Change_OI", "Cumulative_CE_OI", "Cumulative_PE_OI", "PCR", "Open", "High", "Low", "Close", "Delivery_Percentage"]])
-    
-    # Add Filters
-    min_pcr, max_pcr = st.slider("Filter by PCR", min_value=0.0, max_value=5.0, value=(0.0, 5.0))
-    min_deliv, max_deliv = st.slider("Filter by Delivery Percentage", min_value=0.0, max_value=100.0, value=(0.0, 100.0))
-    
+    # Apply Filters
     filtered_rdx_data = rdx_data[(rdx_data["PCR"] >= min_pcr) & (rdx_data["PCR"] <= max_pcr) &
                                  (rdx_data["Delivery_Percentage"] >= min_deliv) & (rdx_data["Delivery_Percentage"] <= max_deliv)]
     
-    st.dataframe(filtered_rdx_data)
+    # Display Filtered EOD Data
+    st.subheader("Processed EOD Data")
+    st.dataframe(filtered_rdx_data[["TckrSymb", "Future_COI", "Cumulative_Change_OI", "Cumulative_CE_OI", "Cumulative_PE_OI", "PCR", "Open", "High", "Low", "Close", "Delivery_Percentage"]])
+    
+    # Save Processed Data for Download
+    output_filename = f"Processed_RDX_{rdx_data['Date'].iloc[0]}.csv"
+    rdx_data.to_csv(output_filename, index=False)
+    
+    # Provide Download Button
+    with open(output_filename, "rb") as file:
+        st.download_button(
+            label="Download Processed RDX Data",
+            data=file,
+            file_name=output_filename,
+            mime="text/csv"
+        )
+
+# Sidebar: Historical Data Upload
+st.sidebar.header("Historical Data Upload")
+historical_file = st.sidebar.file_uploader("Upload Historical Data", type=["csv"], key="historical")
 
 # Section 2: Historical Data
 st.header("Historical Data")
-
-historical_file = st.file_uploader("Upload Historical Data", type=["csv"], key="historical")
 if historical_file:
     historical_data = pd.read_csv(historical_file)
     st.subheader("Historical Data")
