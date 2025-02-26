@@ -2,9 +2,6 @@ import streamlit as st
 import pandas as pd
 import datetime
 import os
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
-from google.oauth2 import service_account
 
 # Streamlit App Title
 st.title("RDX Dashboard - Single Day Data Upload")
@@ -75,11 +72,3 @@ if cash_file and fo_file:
     filename = f"RDX_Data_{trade_date}.csv"
     rdx_data.to_csv(filename, index=False)
     st.success(f"RDX dataset saved as {filename}")
-    
-    # Google Drive Upload
-    credentials = service_account.Credentials.from_service_account_info(st.secrets["gdrive_credentials"], scopes=["https://www.googleapis.com/auth/drive"])
-    drive_service = build("drive", "v3", credentials=credentials)
-    file_metadata = {"name": filename, "parents": [st.secrets["gdrive_folder_id"]]}
-    media = MediaFileUpload(filename, mimetype="text/csv")
-    drive_service.files().create(body=file_metadata, media_body=media, fields="id").execute()
-    st.success(f"RDX dataset uploaded to Google Drive: {filename}")
