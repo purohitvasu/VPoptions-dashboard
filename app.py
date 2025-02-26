@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import gspread
+import json
 from google.oauth2.service_account import Credentials
 
 # Streamlit App Title
@@ -60,9 +61,12 @@ if cash_file and fo_file:
     st.subheader("RDX Merged Dataset")
     st.dataframe(df_rdx)
     
-    # Save to Google Sheets
-    creds = Credentials.from_service_account_file("service_account.json", scopes=["https://www.googleapis.com/auth/spreadsheets"])
+    # Load Google Sheets credentials from Streamlit secrets
+    creds_dict = json.loads(st.secrets["gcp_service_account"])
+    creds = Credentials.from_service_account_info(creds_dict)
     client = gspread.authorize(creds)
+    
+    # Save to Google Sheets
     sheet = client.open("RDX_Data").sheet1
     sheet.clear()
     sheet.update([df_rdx.columns.values.tolist()] + df_rdx.values.tolist())
