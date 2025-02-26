@@ -65,7 +65,7 @@ if cash_file and fo_file:
                           (df_rdx["PCR"] >= pcr_min) & (df_rdx["PCR"] <= pcr_max)]
     
     # Display Filtered RDX Dataset
-    st.subheader("Filtered RDX Dataset")
+    st.subheader("RDX Stocks")
     st.dataframe(df_filtered)
     
     # Save to SQLite Database
