@@ -49,6 +49,11 @@ def process_fo_data(fo_file):
     df_options_pivot.replace([float('inf'), -float('inf')], 0, inplace=True)
     
     df_rdx = df_futures_cumulative.merge(df_options_pivot, on="TckrSymb", how="outer")
+    
+    # Extract Trade Date from F&O Bhavcopy
+    trade_date = df_fo["TradDt"].iloc[0] if "TradDt" in df_fo.columns else datetime.datetime.today().strftime('%Y-%m-%d')
+    df_rdx.insert(0, "Date", trade_date)
+    
     return df_rdx
 
 if cash_file and fo_file:
@@ -60,15 +65,11 @@ if cash_file and fo_file:
     # Merge Processed Data
     rdx_data = fo_data.merge(cash_data, on="TckrSymb", how="inner")
     
-    # Add Date
-    trade_date = datetime.datetime.today().strftime('%Y-%m-%d')
-    rdx_data.insert(0, "Date", trade_date)
-    
     # Display Processed Data
     st.subheader("Processed RDX Dataset")
     st.dataframe(rdx_data)
     
     # Save to CSV
-    filename = f"RDX_Data_{trade_date}.csv"
+    filename = f"RDX_Data_{rdx_data['Date'].iloc[0]}.csv"
     rdx_data.to_csv(filename, index=False)
     st.success(f"RDX dataset saved as {filename}")
