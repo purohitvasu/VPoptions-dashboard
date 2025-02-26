@@ -1,10 +1,8 @@
 import streamlit as st
 import pandas as pd
 import datetime
-from google.colab import drive
-
-# Mount Google Drive
-drive.mount('/content/drive')
+import gspread
+from google.oauth2.service_account import Credentials
 
 # Streamlit App Title
 st.title("RDX Dashboard - Futures & Options Analysis")
@@ -62,8 +60,10 @@ if cash_file and fo_file:
     st.subheader("RDX Merged Dataset")
     st.dataframe(df_rdx)
     
-    # Save to Google Drive
-    date_today = datetime.datetime.now().strftime("%Y%m%d")
-    save_path = f"/content/drive/My Drive/RDX_Data_{date_today}.csv"
-    df_rdx.to_csv(save_path, index=False)
-    st.success(f"RDX dataset saved to Google Drive: {save_path}")
+    # Save to Google Sheets
+    creds = Credentials.from_service_account_file("service_account.json", scopes=["https://www.googleapis.com/auth/spreadsheets"])
+    client = gspread.authorize(creds)
+    sheet = client.open("RDX_Data").sheet1
+    sheet.clear()
+    sheet.update([df_rdx.columns.values.tolist()] + df_rdx.values.tolist())
+    st.success("RDX dataset saved to Google Sheets")
