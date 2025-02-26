@@ -55,12 +55,21 @@ if cash_file and fo_file:
     df_rdx = df_rdx.merge(df_cash_filtered, on="TckrSymb", how="left")
     df_rdx.rename(columns={"DELIV_PER": "Delivery_Percentage"}, inplace=True)
     
-    # Display RDX Dataset
-    st.subheader("RDX Merged Dataset")
-    st.dataframe(df_rdx)
+    # Sidebar Filters
+    st.sidebar.subheader("Filters")
+    deliv_min, deliv_max = st.sidebar.slider("Delivery Percentage Range", min_value=float(df_rdx["Delivery_Percentage"].min()), max_value=float(df_rdx["Delivery_Percentage"].max()), value=(float(df_rdx["Delivery_Percentage"].min()), float(df_rdx["Delivery_Percentage"].max())))
+    pcr_min, pcr_max = st.sidebar.slider("PCR Range", min_value=float(df_rdx["PCR"].min()), max_value=float(df_rdx["PCR"].max()), value=(float(df_rdx["PCR"].min()), float(df_rdx["PCR"].max())))
+    
+    # Apply Filters
+    df_filtered = df_rdx[(df_rdx["Delivery_Percentage"] >= deliv_min) & (df_rdx["Delivery_Percentage"] <= deliv_max) &
+                          (df_rdx["PCR"] >= pcr_min) & (df_rdx["PCR"] <= pcr_max)]
+    
+    # Display Filtered RDX Dataset
+    st.subheader("Filtered RDX Dataset")
+    st.dataframe(df_filtered)
     
     # Save to SQLite Database
     conn = sqlite3.connect("rdx_data.db")
-    df_rdx.to_sql("rdx_table", conn, if_exists="replace", index=False)
+    df_filtered.to_sql("rdx_table", conn, if_exists="replace", index=False)
     conn.close()
-    st.success("RDX dataset saved to SQLite database")
+    st.success("Filtered RDX dataset saved to SQLite database")
