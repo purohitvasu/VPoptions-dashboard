@@ -17,6 +17,12 @@ db_file = "rdx_data.db"
 conn = sqlite3.connect(db_file)
 cursor = conn.cursor()
 
+# List all tables in the database to debug missing table issue
+tables_query = "SELECT name FROM sqlite_master WHERE type='table'"
+cursor.execute(tables_query)
+available_tables = cursor.fetchall()
+st.sidebar.write("Available Tables in DB:", available_tables)
+
 # Ensure cash_market_table exists
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS cash_market_table (
@@ -59,16 +65,27 @@ rdx_table_exists = cursor.fetchone()[0]
 merged_rdx_cash_data = pd.DataFrame()
 
 if cash_table_exists and rdx_table_exists:
-    # Fetch Merged Data
-    query = """
-        SELECT f.Date, f.TckrSymb, f.Future_COI, f.Cumulative_Change_OI, 
-               f.Cumulative_CE_OI, f.Cumulative_PE_OI, f.PCR, 
-               c.Open, c.High, c.Low, c.Close, c.Delivery_Percentage
-        FROM rdx_table f
-        INNER JOIN cash_market_table c 
-        ON f.Date = c.Date AND f.TckrSymb = c.TckrSymb
-    """
-    merged_rdx_cash_data = pd.read_sql(query, conn)
+    # Check if tables have data
+    cursor.execute("SELECT COUNT(*) FROM cash_market_table")
+cash_data_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM rdx_table")
+    rdx_data_count = cursor.fetchone()[0]
+    
+    if cash_data_count > 0 and rdx_data_count > 0:
+        # Fetch Merged Data
+        query = """
+            SELECT f.Date, f.TckrSymb, f.Future_COI, f.Cumulative_Change_OI, 
+                   f.Cumulative_CE_OI, f.Cumulative_PE_OI, f.PCR, 
+                   c.Open, c.High, c.Low, c.Close, c.Delivery_Percentage
+            FROM rdx_table f
+            INNER JOIN cash_market_table c 
+            ON f.Date = c.Date AND f.TckrSymb = c.TckrSymb
+        """
+        merged_rdx_cash_data = pd.read_sql(query, conn)
+    else:
+        st.warning("Tables exist but contain no data. Please upload and process the required files.")
+else:
+    st.error("One or both required tables are missing. Please re-run the data processing.")
 
 conn.close()
 
