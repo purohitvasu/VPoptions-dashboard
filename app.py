@@ -62,7 +62,7 @@ if cash_file and fo_file:
     st.dataframe(df_rdx)
     
     # Load Google Sheets credentials from Streamlit secrets
-    creds_dict = json.loads(json.dumps(st.secrets["gcp_service_account"]))
+    creds_dict = json.loads(st.secrets["gcp_service_account"].to_json())
     creds = Credentials.from_service_account_info(creds_dict)
     client = gspread.authorize(creds)
     
