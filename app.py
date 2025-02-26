@@ -13,6 +13,20 @@ cash_file = st.sidebar.file_uploader("Upload Cash Market Bhavcopy", type=["csv"]
 fo_file = st.sidebar.file_uploader("Upload F&O Bhavcopy", type=["csv"])
 db_file = "rdx_data.db"
 
+# Clear SQLite database before processing new data
+
+def clear_database():
+    conn = sqlite3.connect(db_file)
+    cursor = conn.cursor()
+    cursor.execute("DROP TABLE IF EXISTS rdx_table")
+    cursor.execute("DROP TABLE IF EXISTS merged_rdx_table")
+    conn.commit()
+    conn.close()
+    st.sidebar.success("SQLite database cleared successfully")
+
+if st.sidebar.button("Clear SQLite Database"):
+    clear_database()
+
 # Function to process Cash Market Data
 def process_cash_data(cash_file):
     df_cash = pd.read_csv(cash_file)
@@ -83,11 +97,11 @@ if cash_file and fo_file:
     st.success("RDX dataset saved to SQLite database")
 
 # Section to display SQLite stored data
-st.sidebar.subheader("View Stored Data")
-if st.sidebar.button("Load RDX Data from SQLite"):
+st.sidebar.subheader("View Merged Data from SQLite")
+if st.sidebar.button("Load Merged RDX Data"):
     conn = sqlite3.connect(db_file)
-    query = "SELECT * FROM rdx_table"
-    stored_rdx_data = pd.read_sql(query, conn)
+    query = "SELECT * FROM merged_rdx_table"
+    stored_merged_rdx_data = pd.read_sql(query, conn)
     conn.close()
-    st.subheader("Stored RDX Data from SQLite")
-    st.dataframe(stored_rdx_data)
+    st.subheader("Stored Merged RDX Data from SQLite")
+    st.dataframe(stored_merged_rdx_data)
